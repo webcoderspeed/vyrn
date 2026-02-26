@@ -1,0 +1,61 @@
+// Vryn - Hello World!
+// Yeh hai duniya ka pehla Vryn program!
+
+fn main() {
+    println("Hello, World!")
+    println("Welcome to Vryn Programming Language!")
+
+    let name = "Sanjeev"
+    let age = 25
+    println("Creator: {name}, Age: {age}")
+
+    // Math
+    let x = 10
+    let y = 20
+    println("x + y =")
+    println(x + y)
+
+    // Function call
+    let result = add(5, 3)
+    println("5 + 3 =")
+    println(result)
+
+    // Fibonacci
+    println("Fibonacci(10) =")
+    println(fib(10))
+
+    // Conditional
+    if age >= 18 {
+        println("Adult!")
+    } else {
+        println("Minor!")
+    }
+
+    // Loop
+    let mut count = 0
+    while count < 5 {
+        println(count)
+        count = count + 1
+    }
+
+    // Array
+    let arr = [10, 20, 30, 40, 50]
+    println("Array element at index 2:")
+    println(arr[2])
+
+    // For loop with range
+    for i in 0..5 {
+        println(i)
+    }
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    return a + b
+}
+
+fn fib(n: i32) -> i32 {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}

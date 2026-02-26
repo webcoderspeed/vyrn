@@ -1,0 +1,13 @@
+[package]
+name = "vryn"
+version = "0.1.0"
+edition = "2024"
+description = "The Vryn Programming Language — Fast, Safe, Easy, Universal"
+authors = ["Sanjeev Sharma <webcoderspeed@gmail.com>"]
+license = "MIT"
+
+[[bin]]
+name = "vryn"
+path = "src/main.rs"
+
+[dependencies]
