@@ -496,6 +496,60 @@ impl Parser {
                     object: Box::new(expr),
                     index: Box::new(index),
                 };
+            } else if self.check(&TokenKind::LeftBrace) {
+                // Check for Struct Init: Identifier { field: value }
+                // We look ahead: { ident :
+                let is_struct_init = if let Expression::Identifier(_) = &expr {
+                    // Look ahead for Identifier then Colon, skipping Newlines
+                    let mut k = self.pos + 1;
+                    while k < self.tokens.len() && self.tokens[k].kind == TokenKind::Newline {
+                        k += 1;
+                    }
+                    
+                    if k < self.tokens.len() {
+                         if let TokenKind::Identifier(_) = &self.tokens[k].kind {
+                             // Found identifier, now look for colon
+                             k += 1;
+                             while k < self.tokens.len() && self.tokens[k].kind == TokenKind::Newline {
+                                 k += 1;
+                             }
+                             if k < self.tokens.len() {
+                                 std::mem::discriminant(&self.tokens[k].kind) == std::mem::discriminant(&TokenKind::Colon)
+                             } else { false }
+                         } else { false }
+                    } else { false }
+                } else {
+                    false
+                };
+
+                if is_struct_init {
+                    let name = if let Expression::Identifier(n) = expr { n } else { unreachable!() };
+                    self.advance(); // consume '{'
+
+                    let mut fields = Vec::new();
+                    self.skip_newlines();
+
+                    while !self.check(&TokenKind::RightBrace) {
+                        let field_name = self.expect_identifier()?;
+                        self.expect(TokenKind::Colon)?;
+                        let val = self.parse_expression()?;
+                        fields.push((field_name, val));
+
+                        self.skip_newlines();
+                        if self.check(&TokenKind::Comma) {
+                            self.advance();
+                        }
+                        self.skip_newlines();
+                    }
+
+                    self.expect(TokenKind::RightBrace)?;
+                    expr = Expression::StructInit {
+                        name,
+                        fields,
+                    };
+                } else {
+                    break;
+                }
             } else {
                 break;
             }

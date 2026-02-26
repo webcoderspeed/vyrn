@@ -11,6 +11,11 @@ pub enum Value {
     Str(String),
     Bool(bool),
     Array(Vec<Value>),
+    /// Struct instance: Point { x: 1, y: 2 }
+    Struct {
+        name: String,
+        fields: HashMap<String, Value>,
+    },
     None,
     /// Function value for first-class functions
     Function {
@@ -34,6 +39,14 @@ impl std::fmt::Display for Value {
                     write!(f, "{}", v)?;
                 }
                 write!(f, "]")
+            }
+            Value::Struct { name, fields } => {
+                write!(f, "{} {{ ", name)?;
+                for (i, (k, v)) in fields.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, " }}")
             }
             Value::None => write!(f, "None"),
             Value::Function { name, .. } => write!(f, "<fn {}>", name),
@@ -349,6 +362,7 @@ impl Interpreter {
                                 Value::Array(_) => "array",
                                 Value::None => "None",
                                 Value::Function { .. } => "fn",
+                                Value::Struct { .. } => "struct",
                             };
                             return Ok(Value::Str(type_name.to_string()));
                         }
@@ -499,8 +513,24 @@ impl Interpreter {
                 match (&val, member.as_str()) {
                     (Value::Str(s), "len") => Ok(Value::Int(s.len() as i64)),
                     (Value::Array(a), "len") => Ok(Value::Int(a.len() as i64)),
+                    (Value::Struct { fields, .. }, name) => {
+                        fields.get(name).cloned()
+                            .ok_or_else(|| format!("Struct has no field '{}'", name))
+                    }
                     _ => Err(format!("Cannot access member '{}' on {:?}", member, val)),
                 }
+            }
+
+            Expression::StructInit { name, fields } => {
+                let mut field_values = HashMap::new();
+                for (field_name, expr) in fields {
+                    let val = self.eval_expression(expr)?;
+                    field_values.insert(field_name.clone(), val);
+                }
+                Ok(Value::Struct {
+                    name: name.clone(),
+                    fields: field_values,
+                })
             }
 
             Expression::Index { object, index } => {
@@ -556,8 +586,6 @@ impl Interpreter {
                     body: vec![Statement::Return(Some(*body.clone()))],
                 })
             }
-
-            _ => Err(format!("Expression not yet implemented: {:?}", expr)),
         }
     }
 

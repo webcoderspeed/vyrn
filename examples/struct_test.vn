@@ -1,0 +1,20 @@
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+let p = Point { x: 10, y: 20 }
+println("Point created:", p)
+println("p.x =", p.x)
+println("p.y =", p.y)
+
+let p2 = Point { x: p.x + 5, y: p.y * 2 }
+println("p2:", p2)
+
+struct User {
+    name: str,
+    active: bool,
+}
+
+let u = User { name: "Sanjeev", active: true }
+println("User:", u.name, "Active:", u.active)

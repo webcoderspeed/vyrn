@@ -1,0 +1,39 @@
+struct Point {
+    x: i64,
+    y: i64,
+}
+
+struct Rect {
+    top_left: Point,
+    bottom_right: Point,
+}
+
+fn area(r: Rect) -> i64 {
+    let w = r.bottom_right.x - r.top_left.x
+    let h = r.bottom_right.y - r.top_left.y
+    return w * h
+}
+
+let p1 = Point { x: 0, y: 0 }
+let p2 = Point { x: 10, y: 5 }
+
+let r = Rect {
+    top_left: p1,
+    bottom_right: p2,
+}
+
+println("Rect:", r)
+println("Area:", area(r))
+
+struct Circle {
+    center: Point,
+    radius: i64,
+}
+
+let c = Circle {
+    center: Point { x: 5, y: 5 },
+    radius: 10,
+}
+
+println("Circle center:", c.center)
+println("Circle radius:", c.radius)
