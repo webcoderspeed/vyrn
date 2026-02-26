@@ -1,7 +1,7 @@
 [package]
 name = "vryn"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 description = "The Vryn Programming Language — Fast, Safe, Easy, Universal"
 authors = ["Sanjeev Sharma <webcoderspeed@gmail.com>"]
 license = "MIT"
