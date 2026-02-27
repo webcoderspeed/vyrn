@@ -1,75 +1,119 @@
-// Vryn - Hello World!
-// Yeh hai duniya ka pehla Vryn program!
-// Notice: NO type annotations needed! Simple like Python, powerful like Rust.
+// Vryn - Feature Showcase
+// "C ki speed, Python ki simplicity, Rust ki safety, Java ki universality"
+// NO type annotations needed! Simple like Python, powerful like Rust.
 
 fun main() {
-    println("Hello, World!")
-    println("Welcome to Vryn Programming Language!")
+    println("Hello, Vryn!")
 
+    // Variables: let (immutable) and var (mutable)
     let name = "Sanjeev"
-    let age = 25
-    println("Creator: {name}, Age: {age}")
+    var count = 0
+
+    // Constants
+    const MAX = 100
 
     // Math — simple!
-    let x = 10
-    let y = 20
-    println("x + y =")
-    println(x + y)
-
-    // Function call — no types needed!
     let result = add(5, 3)
-    println("5 + 3 =")
     println(result)
-
-    // Fibonacci
-    println("Fibonacci(10) =")
     println(fib(10))
 
-    // Conditional
-    if age >= 18 {
-        println("Adult!")
-    } else {
-        println("Minor!")
-    }
-
-    // Mutable variable — just use 'var'!
-    var count = 0
+    // Mutable variable with loops
     while count < 5 {
-        println(count)
         count = count + 1
     }
 
-    // Array
+    // Arrays
     let arr = [10, 20, 30, 40, 50]
-    println("Array element at index 2:")
     println(arr[2])
+    println(len(arr))
 
     // For loop with range
     for i in 0..5 {
         println(i)
     }
 
+    // String functions
+    println(str_upper("vryn"))
+    println(str_trim("  hello  "))
+    println(str_contains("hello world", "world"))
+
+    // Math functions
+    println(sqrt(16.0))
+    println(abs(-42))
+    println(max(10, 20))
+
     // Error handling
     let safe = divide(10, 0)
-    println(safe)
+    if is_err(safe) {
+        println("Cannot divide by zero!")
+    }
+
+    // Pattern matching
+    let x = 42
+    let msg = match x {
+        0 => "zero",
+        1 => "one",
+        _ => "other",
+    }
+    println(msg)
+
+    // Struct + methods
+    let p = Point { x: 3, y: 4 }
+    println(p.sum())
 }
 
-// Simple functions — no type annotations needed!
+// Simple functions — no types needed!
 fun add(a, b) {
     return a + b
 }
 
 fun fib(n) {
-    if n <= 1 {
-        return n
-    }
+    if n <= 1 { return n }
     return fib(n - 1) + fib(n - 2)
 }
 
-// You CAN add types when you want (optional!)
+// Optional type annotations when you want them
 fun divide(a: int, b: int) {
-    if b == 0 {
-        return Err("Cannot divide by zero!")
-    }
+    if b == 0 { return Err("Cannot divide by zero!") }
     return Ok(a / b)
+}
+
+// Structs with impl blocks
+struct Point {
+    x: int,
+    y: int,
+}
+
+impl Point {
+    fun sum(self) {
+        return self.x + self.y
+    }
+}
+
+// Traits
+trait Describable {
+    fun describe(self) -> str
+}
+
+impl Describable for Point {
+    fun describe(self) {
+        return "A point"
+    }
+}
+
+// Async functions
+async fun fetch(url) {
+    return 42
+}
+
+// Test functions (run with: vryn test hello.vn)
+fun test_add() {
+    assert_eq(add(2, 3), 5)
+    assert_ne(add(2, 3), 6)
+}
+
+fun test_fib() {
+    assert_eq(fib(0), 0)
+    assert_eq(fib(1), 1)
+    assert_eq(fib(10), 55)
 }
