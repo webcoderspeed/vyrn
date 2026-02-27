@@ -789,6 +789,52 @@ impl TypeChecker {
                     return_type: Box::new(VrynType::Any),
                 })
             }
+
+            Expression::TryCatch { try_body, catch_var: _, catch_body } => {
+                self.env.push_scope();
+
+                // Check try block
+                let mut try_type = VrynType::Void;
+                for stmt in try_body {
+                    match stmt {
+                        Statement::Expression(expr) => {
+                            try_type = self.infer_expr(expr)?;
+                        }
+                        _ => {
+                            self.check_statement(stmt)?;
+                        }
+                    }
+                }
+
+                // Check catch block
+                let mut catch_type = VrynType::Void;
+                for stmt in catch_body {
+                    match stmt {
+                        Statement::Expression(expr) => {
+                            catch_type = self.infer_expr(expr)?;
+                        }
+                        _ => {
+                            self.check_statement(stmt)?;
+                        }
+                    }
+                }
+
+                self.env.pop_scope();
+
+                // Both branches should have compatible types
+                if try_type == catch_type {
+                    Ok(try_type)
+                } else {
+                    Ok(VrynType::Any)
+                }
+            }
+
+            Expression::QuestionMark { expr } => {
+                let expr_type = self.infer_expr(expr)?;
+                // Question mark operator expects a Result type and unwraps it
+                // For now, we return Any to avoid strict type checking
+                Ok(VrynType::Any)
+            }
         }
     }
 

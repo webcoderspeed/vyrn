@@ -34,6 +34,11 @@ pub enum Value {
         variant: String,
         values: Vec<Value>,
     },
+    /// Result type: Ok(value) or Err(value)
+    Result {
+        ok: bool,
+        value: Box<Value>,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -72,6 +77,13 @@ impl std::fmt::Display for Value {
                         write!(f, "{}", v)?;
                     }
                     write!(f, ")")
+                }
+            }
+            Value::Result { ok, value } => {
+                if *ok {
+                    write!(f, "Ok({})", value)
+                } else {
+                    write!(f, "Err({})", value)
                 }
             }
         }
@@ -394,6 +406,7 @@ impl Interpreter {
                                 Value::Struct { .. } => "struct",
                                 Value::EnumType { .. } => "enum",
                                 Value::Variant { .. } => "variant",
+                                Value::Result { .. } => "Result",
                             };
                             return Ok(Value::Str(type_name.to_string()));
                         }
@@ -403,6 +416,86 @@ impl Interpreter {
                             }
                             let val = self.eval_expression(&args[0])?;
                             return Ok(Value::Str(format!("{}", val)));
+                        }
+                        "Ok" => {
+                            if args.len() != 1 {
+                                return Err("Ok() takes exactly 1 argument".to_string());
+                            }
+                            let val = self.eval_expression(&args[0])?;
+                            return Ok(Value::Result {
+                                ok: true,
+                                value: Box::new(val),
+                            });
+                        }
+                        "Err" => {
+                            if args.len() != 1 {
+                                return Err("Err() takes exactly 1 argument".to_string());
+                            }
+                            let val = self.eval_expression(&args[0])?;
+                            return Ok(Value::Result {
+                                ok: false,
+                                value: Box::new(val),
+                            });
+                        }
+                        "is_ok" => {
+                            if args.len() != 1 {
+                                return Err("is_ok() takes exactly 1 argument".to_string());
+                            }
+                            let val = self.eval_expression(&args[0])?;
+                            return match val {
+                                Value::Result { ok, .. } => Ok(Value::Bool(ok)),
+                                _ => Err("is_ok() requires a Result".to_string()),
+                            };
+                        }
+                        "is_err" => {
+                            if args.len() != 1 {
+                                return Err("is_err() takes exactly 1 argument".to_string());
+                            }
+                            let val = self.eval_expression(&args[0])?;
+                            return match val {
+                                Value::Result { ok, .. } => Ok(Value::Bool(!ok)),
+                                _ => Err("is_err() requires a Result".to_string()),
+                            };
+                        }
+                        "unwrap" => {
+                            if args.len() != 1 {
+                                return Err("unwrap() takes exactly 1 argument".to_string());
+                            }
+                            let val = self.eval_expression(&args[0])?;
+                            return match val {
+                                Value::Result { ok, value } => {
+                                    if ok {
+                                        Ok(*value)
+                                    } else {
+                                        Err(format!("Called unwrap on an error: {}", value))
+                                    }
+                                }
+                                _ => Err("unwrap() requires a Result".to_string()),
+                            };
+                        }
+                        "unwrap_or" => {
+                            if args.len() != 2 {
+                                return Err("unwrap_or() takes exactly 2 arguments".to_string());
+                            }
+                            let val = self.eval_expression(&args[0])?;
+                            let default = self.eval_expression(&args[1])?;
+                            return match val {
+                                Value::Result { ok, value } => {
+                                    if ok {
+                                        Ok(*value)
+                                    } else {
+                                        Ok(default)
+                                    }
+                                }
+                                _ => Err("unwrap_or() requires a Result".to_string()),
+                            };
+                        }
+                        "panic" => {
+                            if args.is_empty() {
+                                return Err("Panic!".to_string());
+                            }
+                            let msg = self.eval_expression(&args[0])?;
+                            return Err(format!("Panic: {}", msg));
                         }
                         _ => {}
                     }
@@ -635,6 +728,66 @@ impl Interpreter {
                     params: func_params,
                     body: vec![Statement::Return(Some(*body.clone()))],
                 })
+            }
+
+            Expression::TryCatch { try_body, catch_var, catch_body } => {
+                self.env.push_scope();
+                let mut result = Value::None;
+                let mut caught_error = false;
+
+                // Try executing the try block
+                for stmt in try_body {
+                    match self.exec_statement(stmt) {
+                        Ok(Signal::Return(v)) => {
+                            result = v;
+                            self.env.pop_scope();
+                            return Ok(result);
+                        }
+                        Ok(_) => {}
+                        Err(err) => {
+                            // Caught an error, bind it to the catch variable and run catch block
+                            caught_error = true;
+                            self.env.define(catch_var, Value::Str(err));
+                            break;
+                        }
+                    }
+                }
+
+                if caught_error {
+                    // Execute catch block with the error bound to catch_var
+                    for stmt in catch_body {
+                        match self.exec_statement(stmt) {
+                            Ok(Signal::Return(v)) => {
+                                result = v;
+                                self.env.pop_scope();
+                                return Ok(result);
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                self.env.pop_scope();
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+
+                self.env.pop_scope();
+                Ok(result)
+            }
+
+            Expression::QuestionMark { expr } => {
+                let val = self.eval_expression(expr)?;
+                match val {
+                    Value::Result { ok, value } => {
+                        if ok {
+                            Ok(*value)
+                        } else {
+                            // Propagate the error up
+                            Err(format!("Error propagated with ?: {}", value))
+                        }
+                    }
+                    _ => Err("? operator requires a Result type".to_string()),
+                }
             }
         }
     }
@@ -949,5 +1102,221 @@ mod tests {
         "#);
         assert!(result.is_ok());
         assert_eq!(output[0], "10");
+    }
+
+    // ============== ERROR HANDLING TESTS (Phase 7) ==============
+
+    #[test]
+    fn test_ok_creation() {
+        let (result, output) = run_vryn(r#"
+            let x = Ok(42)
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Ok(42)");
+    }
+
+    #[test]
+    fn test_err_creation() {
+        let (result, output) = run_vryn(r#"
+            let x = Err("error message")
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Err(error message)");
+    }
+
+    #[test]
+    fn test_is_ok_true() {
+        let (result, output) = run_vryn(r#"
+            let x = Ok(10)
+            println(is_ok(x))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_is_ok_false() {
+        let (result, output) = run_vryn(r#"
+            let x = Err("failed")
+            println(is_ok(x))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "false");
+    }
+
+    #[test]
+    fn test_is_err_true() {
+        let (result, output) = run_vryn(r#"
+            let x = Err("failed")
+            println(is_err(x))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_is_err_false() {
+        let (result, output) = run_vryn(r#"
+            let x = Ok(5)
+            println(is_err(x))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "false");
+    }
+
+    #[test]
+    fn test_unwrap_ok() {
+        let (result, output) = run_vryn(r#"
+            let x = Ok(99)
+            let val = unwrap(x)
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "99");
+    }
+
+    #[test]
+    fn test_unwrap_err() {
+        let (result, _output) = run_vryn(r#"
+            let x = Err("something went wrong")
+            unwrap(x)
+        "#);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unwrap on an error"));
+    }
+
+    #[test]
+    fn test_unwrap_or_ok() {
+        let (result, output) = run_vryn(r#"
+            let x = Ok(42)
+            let val = unwrap_or(x, 0)
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_unwrap_or_err() {
+        let (result, output) = run_vryn(r#"
+            let x = Err("failed")
+            let val = unwrap_or(x, 100)
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "100");
+    }
+
+    #[test]
+    fn test_try_catch_success() {
+        let (result, output) = run_vryn(r#"
+            let x = try {
+                return 42
+            } catch e {
+                return 0
+            }
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_try_catch_with_error() {
+        let (result, output) = run_vryn(r#"
+            let x = try {
+                panic("test error")
+            } catch e {
+                println(e)
+                return 99
+            }
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        // The error message should be printed in the catch block
+        assert!(output[0].contains("Panic"));
+        assert_eq!(output[1], "99");
+    }
+
+    #[test]
+    fn test_panic_function() {
+        let (result, _output) = run_vryn(r#"
+            panic("this should fail")
+        "#);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Panic"));
+    }
+
+    #[test]
+    fn test_question_mark_ok() {
+        let (result, output) = run_vryn(r#"
+            fn get_result() -> Result {
+                return Ok(50)
+            }
+            let x = get_result()?
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "50");
+    }
+
+    #[test]
+    fn test_question_mark_err() {
+        let (result, _output) = run_vryn(r#"
+            fn get_result() -> Result {
+                return Err("failed operation")
+            }
+            let x = get_result()?
+            println(x)
+        "#);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Error propagated"));
+    }
+
+    #[test]
+    fn test_result_type_of() {
+        let (result, output) = run_vryn(r#"
+            let x = Ok(5)
+            println(type_of(x))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Result");
+    }
+
+    #[test]
+    fn test_nested_try_catch() {
+        let (result, output) = run_vryn(r#"
+            let x = try {
+                let y = try {
+                    return 10
+                } catch e1 {
+                    return 5
+                }
+                return y
+            } catch e2 {
+                return 0
+            }
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    #[test]
+    fn test_ok_in_function() {
+        let (result, output) = run_vryn(r#"
+            fn divide(a: i32, b: i32) -> Result {
+                if b == 0 {
+                    return Err("division by zero")
+                }
+                return Ok(a)
+            }
+            let res = divide(10, 2)
+            println(res)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Ok(10)");
     }
 }

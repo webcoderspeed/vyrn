@@ -550,6 +550,11 @@ impl Parser {
                 } else {
                     break;
                 }
+            } else if self.check(&TokenKind::Question) {
+                self.advance();
+                expr = Expression::QuestionMark {
+                    expr: Box::new(expr),
+                };
             } else {
                 break;
             }
@@ -631,6 +636,9 @@ impl Parser {
             }
             TokenKind::Match => {
                 self.parse_match_expression()
+            }
+            TokenKind::Try => {
+                self.parse_try_catch()
             }
             TokenKind::Pipe => {
                 self.parse_lambda()
@@ -740,6 +748,22 @@ impl Parser {
         let body = Box::new(self.parse_expression()?);
 
         Ok(Expression::Lambda { params, body })
+    }
+
+    /// Parse try-catch: try { ... } catch var { ... }
+    fn parse_try_catch(&mut self) -> Result<Expression, String> {
+        self.expect(TokenKind::Try)?;
+        let try_body = self.parse_block()?;
+
+        self.expect(TokenKind::Catch)?;
+        let catch_var = self.expect_identifier()?;
+        let catch_body = self.parse_block()?;
+
+        Ok(Expression::TryCatch {
+            try_body,
+            catch_var,
+            catch_body,
+        })
     }
 
     // ==========================================

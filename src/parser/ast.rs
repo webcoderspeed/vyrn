@@ -154,6 +154,16 @@ pub enum Expression {
         params: Vec<String>,
         body: Box<Expression>,
     },
+    /// Try-catch: try { ... } catch e { ... }
+    TryCatch {
+        try_body: Vec<Statement>,
+        catch_var: String,
+        catch_body: Vec<Statement>,
+    },
+    /// Question mark operator: expr?
+    QuestionMark {
+        expr: Box<Expression>,
+    },
 }
 
 #[derive(Debug, Clone)]

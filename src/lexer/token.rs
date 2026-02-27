@@ -42,6 +42,8 @@ pub enum TokenKind {
     Static,
     Mod,
     Where,
+    Try,
+    Catch,
     // Some, None, Ok, Err are now standard Identifiers
 
     // === Operators ===
@@ -151,6 +153,8 @@ pub fn lookup_keyword(word: &str) -> Option<TokenKind> {
         "static"   => Some(TokenKind::Static),
         "mod"      => Some(TokenKind::Mod),
         "where"    => Some(TokenKind::Where),
+        "try"      => Some(TokenKind::Try),
+        "catch"    => Some(TokenKind::Catch),
         _ => Option::None,
     }
 }
