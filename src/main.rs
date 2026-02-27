@@ -1,6 +1,7 @@
 mod lexer;
 mod parser;
 mod codegen;
+mod typechecker;
 
 use std::env;
 use std::fs;
@@ -9,6 +10,7 @@ use std::io::{self, Write, BufRead};
 use lexer::Lexer;
 use parser::Parser;
 use codegen::Interpreter;
+use typechecker::TypeChecker;
 
 const VERSION: &str = "0.1.0-alpha";
 
@@ -231,13 +233,25 @@ fn check_file(path: &str) {
     };
 
     let mut parser = Parser::new(tokens);
-    match parser.parse() {
-        Ok(_) => println!("\x1b[32m✓\x1b[0m {} — no errors found", path),
+    let program = match parser.parse() {
+        Ok(p) => p,
         Err(e) => {
             eprintln!("\x1b[31merror[Parser]:\x1b[0m {}", e);
             std::process::exit(1);
         }
     };
+
+    let mut type_checker = TypeChecker::new();
+    let type_errors = type_checker.check_program(&program);
+
+    if !type_errors.is_empty() {
+        for err in &type_errors {
+            eprintln!("\x1b[31merror[TypeChecker]:\x1b[0m {}", err);
+        }
+        std::process::exit(1);
+    } else {
+        println!("\x1b[32m✓\x1b[0m {} — no errors found", path);
+    }
 }
 
 fn show_tokens(path: &str) {
