@@ -5,6 +5,7 @@ mod typechecker;
 mod formatter;
 mod package;
 mod ccodegen;
+mod docgen;
 
 use std::env;
 use std::fs;
@@ -91,6 +92,13 @@ fn main() {
             }
             compile_file(&args[2]);
         }
+        "doc" => {
+            if args.len() < 3 {
+                eprintln!("Usage: vryn doc <file.vn>");
+                std::process::exit(1);
+            }
+            generate_docs(&args[2]);
+        }
         other => {
             if other.ends_with(".vn") {
                 run_file(other);
@@ -118,6 +126,7 @@ fn print_usage() {
     init              Initialize a Vryn project in current directory
     test [file.vn]    Run test functions (test_*)
     fmt <file.vn>     Format code with 4-space indentation
+    doc <file.vn>     Generate HTML/Markdown documentation
     repl              Start interactive REPL
     check <file.vn>   Type-check without running
     version           Show version info
@@ -593,6 +602,65 @@ fn compile_file(filepath: &str) {
         }
         _ => {
             eprintln!("\x1b[33mwarning:\x1b[0m Could not compile with gcc (is it installed?)");
+        }
+    }
+}
+
+fn generate_docs(filepath: &str) {
+    let content = match fs::read_to_string(filepath) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[31merror:[0m Could not read file '{}': {}", filepath, e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut lexer = Lexer::new(&content);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[31merror[Lexer]:[0m {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let program = match parser.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[31merror[Parser]:[0m {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Extract documentation
+    let docs = docgen::DocGenerator::extract_docs(&program);
+
+    // Generate HTML
+    let html = docgen::DocGenerator::generate_html(&docs);
+
+    // Write to .html file
+    let html_filepath = filepath.replace(".vn", "_docs.html");
+    match fs::write(&html_filepath, &html) {
+        Ok(_) => {
+            println!("[32m✓[0m Generated documentation in '{}'", html_filepath);
+        }
+        Err(e) => {
+            eprintln!("[31merror:[0m Could not write to file '{}': {}", html_filepath, e);
+            std::process::exit(1);
+        }
+    }
+
+    // Also generate Markdown
+    let markdown = docgen::DocGenerator::generate_markdown(&docs);
+    let md_filepath = filepath.replace(".vn", "_docs.md");
+    match fs::write(&md_filepath, &markdown) {
+        Ok(_) => {
+            println!("[32m✓[0m Generated documentation in '{}'", md_filepath);
+        }
+        Err(e) => {
+            eprintln!("[31merror:[0m Could not write to file '{}': {}", md_filepath, e);
+            std::process::exit(1);
         }
     }
 }

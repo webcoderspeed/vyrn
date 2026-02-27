@@ -1185,6 +1185,37 @@ impl Interpreter {
     };
 }
 
+"json_encode" => {
+    if args.len() != 1 {
+        return Err("json_encode() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    let json_str = self.value_to_json(&val, false);
+    return Ok(Value::Str(json_str));
+}
+"json_decode" => {
+    if args.len() != 1 {
+        return Err("json_decode() takes exactly 1 argument".to_string());
+    }
+    let json_str = self.eval_expression(&args[0])?;
+    return match json_str {
+        Value::Str(s) => {
+            match self.json_to_value(&s) {
+                Ok(v) => Ok(v),
+                Err(e) => Err(format!("JSON parse error: {}", e)),
+            }
+        }
+        _ => Err("json_decode() requires a string".to_string()),
+    };
+}
+"json_pretty" => {
+    if args.len() != 1 {
+        return Err("json_pretty() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    let json_str = self.value_to_json(&val, true);
+    return Ok(Value::Str(json_str));
+}
                         _ => {}
                     }
                 }
@@ -1859,6 +1890,416 @@ impl Interpreter {
                 };
                 self.env.pop_scope();
                 Ok(guard_result)
+            }
+        }
+    }
+
+    fn value_to_json(&self, val: &Value, pretty: bool) -> String {
+        self.value_to_json_internal(val, pretty, 0)
+    }
+
+    fn value_to_json_internal(&self, val: &Value, pretty: bool, depth: usize) -> String {
+        match val {
+            Value::Int(n) => format!("{}", n),
+            Value::Float(f) => {
+                if f.is_finite() {
+                    let s = format!("{}", f);
+                    if s.contains('.') || s.contains('e') || s.contains('E') {
+                        s
+                    } else {
+                        format!("{}.0", *f as i64)
+                    }
+                } else if f.is_infinite() {
+                    if *f > 0.0 { "1e308".to_string() } else { "-1e308".to_string() }
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            Value::Str(s) => {
+                let mut result = String::from("\"");
+                for c in s.chars() {
+                    match c {
+                        '\"' => result.push_str("\\\""),
+                        '\\' => result.push_str("\\\\"),
+                        '\n' => result.push_str("\\n"),
+                        '\r' => result.push_str("\\r"),
+                        '\t' => result.push_str("\\t"),
+                        c if c.is_control() => {
+                            result.push_str(&format!("\\u{:04x}", c as u32));
+                        }
+                        c => result.push(c),
+                    }
+                }
+                result.push('\"');
+                result
+            }
+            Value::Bool(b) => format!("{}", b),
+            Value::None => "null".to_string(),
+            Value::Array(arr) => {
+                if arr.is_empty() {
+                    "[]".to_string()
+                } else if pretty {
+                    let indent = "  ".repeat(depth + 1);
+                    let close_indent = "  ".repeat(depth);
+                    let items: Vec<String> = arr.iter()
+                        .map(|v| format!("{}{}", indent, self.value_to_json_internal(v, pretty, depth + 1)))
+                        .collect();
+                    format!("[\\n{}\\n{}]", items.join(",\\n"), close_indent)
+                } else {
+                    let items: Vec<String> = arr.iter()
+                        .map(|v| self.value_to_json_internal(v, pretty, depth + 1))
+                        .collect();
+                    format!("[{}]", items.join(","))
+                }
+            }
+            Value::Struct { name, fields } => {
+                if fields.is_empty() {
+                    "{}".to_string()
+                } else if pretty {
+                    let indent = "  ".repeat(depth + 1);
+                    let close_indent = "  ".repeat(depth);
+                    let mut items = Vec::new();
+                    let mut keys: Vec<_> = fields.keys().collect();
+                    keys.sort();
+                    for key in keys {
+                        let val = &fields[key];
+                        items.push(format!(
+                            "{}\\\"{}\\\": {}",
+                            indent,
+                            key,
+                            self.value_to_json_internal(val, pretty, depth + 1)
+                        ));
+                    }
+                    format!("{{\\n{}\\n{}}}", items.join(",\\n"), close_indent)
+                } else {
+                    let mut items = Vec::new();
+                    let mut keys: Vec<_> = fields.keys().collect();
+                    keys.sort();
+                    for key in keys {
+                        let val = &fields[key];
+                        items.push(format!(
+                            "\\\"{}\\\": {}",
+                            key,
+                            self.value_to_json_internal(val, pretty, depth + 1)
+                        ));
+                    }
+                    format!("{{{}}}", items.join(","))
+                }
+            }
+            _ => "null".to_string(),
+        }
+    }
+
+    fn json_to_value(&self, input: &str) -> Result<Value, String> {
+        let trimmed = input.trim();
+        let mut parser = JsonParser::new(trimmed);
+        parser.parse()
+    }
+
+}
+
+// Simple JSON parser
+struct JsonParser {
+    input: Vec<char>,
+    pos: usize,
+}
+
+impl JsonParser {
+    fn new(input: &str) -> Self {
+        JsonParser {
+            input: input.chars().collect(),
+            pos: 0,
+        }
+    }
+
+    fn current(&self) -> Option<char> {
+        if self.pos < self.input.len() {
+            Some(self.input[self.pos])
+        } else {
+            None
+        }
+    }
+
+    fn advance(&mut self) {
+        self.pos += 1;
+    }
+
+    fn skip_whitespace(&mut self) {
+        while let Some(c) = self.current() {
+            if c.is_whitespace() {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn parse(&mut self) -> Result<Value, String> {
+        self.skip_whitespace();
+        self.parse_value()
+    }
+
+    fn parse_value(&mut self) -> Result<Value, String> {
+        self.skip_whitespace();
+        match self.current() {
+            Some('"') => self.parse_string(),
+            Some('t') | Some('f') => self.parse_bool(),
+            Some('n') => self.parse_null(),
+            Some('[') => self.parse_array(),
+            Some('{') => self.parse_object(),
+            Some(c) if c == '-' || c.is_ascii_digit() => self.parse_number(),
+            Some(c) => Err(format!("Unexpected character: {}", c)),
+            None => Err("Unexpected end of input".to_string()),
+        }
+    }
+
+    fn parse_string(&mut self) -> Result<Value, String> {
+        self.advance();
+        let mut result = String::new();
+        loop {
+            match self.current() {
+                Some('"') => {
+                    self.advance();
+                    return Ok(Value::Str(result));
+                }
+                Some('\\') => {
+                    self.advance();
+                    match self.current() {
+                        Some('"') => result.push('"'),
+                        Some('\\') => result.push('\\'),
+                        Some('/') => result.push('/'),
+                        Some('b') => result.push('\u{0008}'),
+                        Some('f') => result.push('\u{000C}'),
+                        Some('n') => result.push('\n'),
+                        Some('r') => result.push('\r'),
+                        Some('t') => result.push('\t'),
+                        Some('u') => {
+                            self.advance();
+                            let mut hex = String::new();
+                            for _ in 0..4 {
+                                if let Some(c) = self.current() {
+                                    hex.push(c);
+                                    self.advance();
+                                } else {
+                                    return Err("Incomplete unicode escape".to_string());
+                                }
+                            }
+                            if let Ok(code) = u32::from_str_radix(&hex, 16) {
+                                if let Some(ch) = char::from_u32(code) {
+                                    result.push(ch);
+                                } else {
+                                    return Err("Invalid unicode code point".to_string());
+                                }
+                            } else {
+                                return Err("Invalid unicode escape".to_string());
+                            }
+                            continue;
+                        }
+                        _ => return Err("Invalid escape sequence".to_string()),
+                    }
+                    self.advance();
+                }
+                Some(c) => {
+                    result.push(c);
+                    self.advance();
+                }
+                None => return Err("Unterminated string".to_string()),
+            }
+        }
+    }
+
+    fn parse_number(&mut self) -> Result<Value, String> {
+        let start = self.pos;
+        
+        if self.current() == Some('-') {
+            self.advance();
+        }
+
+        if self.current() == Some('0') {
+            self.advance();
+        } else if let Some(c) = self.current() {
+            if c.is_ascii_digit() {
+                while let Some(c) = self.current() {
+                    if c.is_ascii_digit() {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                return Err("Invalid number".to_string());
+            }
+        } else {
+            return Err("Invalid number".to_string());
+        }
+
+        let has_decimal = if self.current() == Some('.') {
+            self.advance();
+            if let Some(c) = self.current() {
+                if c.is_ascii_digit() {
+                    while let Some(c) = self.current() {
+                        if c.is_ascii_digit() {
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                    true
+                } else {
+                    return Err("Invalid number: missing digit after decimal".to_string());
+                }
+            } else {
+                return Err("Invalid number: missing digit after decimal".to_string());
+            }
+        } else {
+            false
+        };
+
+        let has_exponent = if let Some(c) = self.current() {
+            if c == 'e' || c == 'E' {
+                self.advance();
+                if let Some(c) = self.current() {
+                    if c == '+' || c == '-' {
+                        self.advance();
+                    }
+                }
+                if let Some(c) = self.current() {
+                    if c.is_ascii_digit() {
+                        while let Some(c) = self.current() {
+                            if c.is_ascii_digit() {
+                                self.advance();
+                            } else {
+                                break;
+                            }
+                        }
+                        true
+                    } else {
+                        return Err("Invalid exponent".to_string());
+                    }
+                } else {
+                    return Err("Incomplete exponent".to_string());
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        let num_str: String = self.input[start..self.pos].iter().collect();
+        
+        if has_decimal || has_exponent {
+            match num_str.parse::<f64>() {
+                Ok(f) => Ok(Value::Float(f)),
+                Err(_) => Err(format!("Invalid float: {}", num_str)),
+            }
+        } else {
+            match num_str.parse::<i64>() {
+                Ok(i) => Ok(Value::Int(i)),
+                Err(_) => Err(format!("Invalid integer: {}", num_str)),
+            }
+        }
+    }
+
+    fn parse_bool(&mut self) -> Result<Value, String> {
+        if self.input[self.pos..].starts_with(&['t', 'r', 'u', 'e']) {
+            self.pos += 4;
+            Ok(Value::Bool(true))
+        } else if self.input[self.pos..].starts_with(&['f', 'a', 'l', 's', 'e']) {
+            self.pos += 5;
+            Ok(Value::Bool(false))
+        } else {
+            Err("Invalid boolean".to_string())
+        }
+    }
+
+    fn parse_null(&mut self) -> Result<Value, String> {
+        if self.input[self.pos..].starts_with(&['n', 'u', 'l', 'l']) {
+            self.pos += 4;
+            Ok(Value::None)
+        } else {
+            Err("Invalid null".to_string())
+        }
+    }
+
+    fn parse_array(&mut self) -> Result<Value, String> {
+        self.advance();
+        self.skip_whitespace();
+
+        let mut elements = Vec::new();
+
+        if self.current() == Some(']') {
+            self.advance();
+            return Ok(Value::Array(elements));
+        }
+
+        loop {
+            elements.push(self.parse_value()?);
+            self.skip_whitespace();
+
+            match self.current() {
+                Some(',') => {
+                    self.advance();
+                    self.skip_whitespace();
+                }
+                Some(']') => {
+                    self.advance();
+                    return Ok(Value::Array(elements));
+                }
+                _ => return Err("Expected ',' or ']' in array".to_string()),
+            }
+        }
+    }
+
+    fn parse_object(&mut self) -> Result<Value, String> {
+        use std::collections::HashMap;
+        
+        self.advance();
+        self.skip_whitespace();
+
+        let mut fields = HashMap::new();
+
+        if self.current() == Some('}') {
+            self.advance();
+            return Ok(Value::Struct {
+                name: "__JSON".to_string(),
+                fields,
+            });
+        }
+
+        loop {
+            self.skip_whitespace();
+            if self.current() != Some('"') {
+                return Err("Expected string key in object".to_string());
+            }
+            let key = match self.parse_string()? {
+                Value::Str(s) => s,
+                _ => return Err("Key must be a string".to_string()),
+            };
+
+            self.skip_whitespace();
+            if self.current() != Some(':') {
+                return Err("Expected ':' after object key".to_string());
+            }
+            self.advance();
+
+            let value = self.parse_value()?;
+            fields.insert(key, value);
+
+            self.skip_whitespace();
+            match self.current() {
+                Some(',') => {
+                    self.advance();
+                    self.skip_whitespace();
+                }
+                Some('}') => {
+                    self.advance();
+                    return Ok(Value::Struct {
+                        name: "__JSON".to_string(),
+                        fields,
+                    });
+                }
+                _ => return Err("Expected ',' or '}' in object".to_string()),
             }
         }
     }
@@ -3805,6 +4246,132 @@ mod tests {
     fn test_assert_eq_strings_fail() {
         let (result, _) = run_vryn(r#"assert_eq("hello", "world")"#);
         assert!(result.is_err());
+    }
+
+
+    // JSON tests
+    #[test]
+    fn test_json_encode_int() {
+        let (result, output) = run_vryn(r#"
+            let json_str = json_encode(42)
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_json_encode_float() {
+        let (result, output) = run_vryn(r#"
+            let json_str = json_encode(3.14)
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3.14");
+    }
+
+    #[test]
+    fn test_json_encode_string() {
+        let (result, output) = run_vryn(r#"
+            let json_str = json_encode("hello")
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "\"hello\"");
+    }
+
+    #[test]
+    fn test_json_encode_bool() {
+        let (result, output) = run_vryn(r#"
+            let json_str = json_encode(true)
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_json_encode_bool_false() {
+        let (result, output) = run_vryn(r#"
+            let json_str = json_encode(false)
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "false");
+    }
+
+    #[test]
+    fn test_json_encode_array() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            let json_str = json_encode(arr)
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[1,2,3]");
+    }
+
+    #[test]
+    fn test_json_decode_int() {
+        let (result, output) = run_vryn(r#"
+            let val = json_decode("42")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_json_decode_string() {
+        let (result, output) = run_vryn(r#"
+            let val = json_decode("\"hello\"")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_json_decode_bool() {
+        let (result, output) = run_vryn(r#"
+            let val = json_decode("true")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_json_decode_null() {
+        let (result, output) = run_vryn(r#"
+            let val = json_decode("null")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "None");
+    }
+
+    #[test]
+    fn test_json_roundtrip_simple() {
+        let (result, output) = run_vryn(r#"
+            let original = 42
+            let json_str = json_encode(original)
+            let decoded = json_decode(json_str)
+            println(decoded)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_json_pretty_basic() {
+        let (result, output) = run_vryn(r#"
+            let val = 42
+            let json_str = json_pretty(val)
+            println(json_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
     }
 
 }
