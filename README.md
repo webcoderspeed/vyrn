@@ -4,35 +4,33 @@
 
 Vryn is a new, general-purpose programming language designed to be fast, safe, and easy to use. It combines the performance and safety of systems programming languages like Rust with the developer experience and simplicity of high-level languages like Python.
 
-🚧 **Status:** Pre-Alpha (v0.1.0-alpha) — Under active development.
+🚧 **Status:** Alpha (v0.1.0) — Under active development.
 
 ## 🚀 Vision
 
 Vryn aims to solve the "two-language problem" where developers prototype in Python/JS but rewrite in C++/Rust for performance. Vryn is designed to be:
 
-*   **Fast:** Compiles to efficient machine code (via LLVM in future, currently interpreted).
+*   **Fast:** Compiles to efficient machine code (via LLVM/Wasm in future, currently interpreted).
 *   **Safe:** Memory safety without garbage collection (ownership model).
 *   **Simple:** Clean, readable syntax with minimal boilerplate.
 *   **Universal:** Suitable for systems programming, web servers, scripts, and more.
 
-## ✨ Features (Implemented so far)
+## ✨ Features
 
 *   **Modern Syntax:** Clean, expression-based syntax inspired by Rust and Python.
-*   **Lexer & Parser:** Full recursive descent parser with error recovery.
-*   **Interpreter:** Tree-walking interpreter for immediate feedback (REPL & Run).
-*   **Type System (Partial):** Static typing with type inference (work in progress).
-*   **Control Flow:** `if/else`, `while`, `for` loops, and `match` expressions.
-*   **Functions:** First-class functions with lexical scoping.
-*   **Data Structures:** Arrays, Structs (parsing only), and basic primitives.
-*   **Tooling:** Built-in CLI for running, checking, and debugging code.
+*   **Rich Type System:** Static typing with type inference, Structs, Enums, and Traits.
+*   **Pattern Matching:** Powerful `match` expressions for control flow.
+*   **Tooling First:** Built-in formatter, linter, test runner, and language server.
+*   **Memory Safety:** Ownership and borrowing rules (in progress).
+*   **No GC:** Deterministic resource management.
 
 ## 📦 Installation
 
-To build Vryn from source, you need **Rust** installed.
+To build Vryn from source, you need **Rust** (cargo) installed.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/vryn-lang/vryn.git
+    git clone https://github.com/webcoderspeed/vryn.git
     cd vryn
     ```
 
@@ -50,28 +48,51 @@ To build Vryn from source, you need **Rust** installed.
 
 ## 💻 Usage
 
-### Interactive REPL
-Start the Read-Eval-Print Loop to experiment with Vryn syntax:
+Vryn comes with a comprehensive CLI tool.
+
+### Project Management
+Initialize a new project or create one from scratch:
 ```bash
+vryn new my_project
+# or
+vryn init
+```
+
+### Running Code
+Execute a Vryn source file or start the REPL:
+```bash
+# Run a file
+vryn run examples/hello.vn
+
+# Start Interactive REPL
 vryn repl
 ```
 
-### Run a File
-Execute a Vryn source file (`.vn`):
-```bash
-vryn run examples/hello.vn
-```
+### Development Tools
+Vryn includes built-in tools for a better developer experience:
 
-### Check Syntax
-Verify code without running it:
 ```bash
+# Check syntax and errors without running
 vryn check examples/hello.vn
+
+# Format code
+vryn fmt examples/hello.vn
+
+# Run tests
+vryn test
+vryn test examples/my_test.vn
+
+# Analyze code (LSP mode)
+vryn analyze examples/hello.vn
 ```
 
 ### Debugging
-View the internal tokens or AST:
+View the internal representation of your code:
 ```bash
+# View Tokens
 vryn tokens examples/hello.vn
+
+# View Abstract Syntax Tree (AST)
 vryn ast examples/hello.vn
 ```
 
@@ -84,69 +105,68 @@ fn main() {
 }
 ```
 
-### Variables & Math
+### Variables & Data Types
 ```vryn
 let name = "Vryn"       // Type inferred as str
-let age: i32 = 1        // Explicit type annotation
+let count: int = 42     // Explicit typing
+let pi = 3.14
+let is_fast = true
+```
 
-let x = 10
-let y = 20
-println("Sum: " + (x + y))
+### Structs & Enums
+```vryn
+struct User {
+    username: str,
+    active: bool,
+}
+
+enum Status {
+    Pending,
+    Active,
+    Suspended(str), // Variant with payload
+}
+
+let user = User {
+    username: "dev",
+    active: true,
+}
+```
+
+### Pattern Matching
+```vryn
+let status = Status::Suspended("Spam")
+
+match status {
+    Status::Active => println("User is active"),
+    Status::Suspended(reason) => println("Suspended: " + reason),
+    _ => println("Status unknown"),
+}
 ```
 
 ### Functions
 ```vryn
-fn add(a: i32, b: i32) -> i32 {
+fn add(a: int, b: int) -> int {
     return a + b
 }
 
-let result = add(5, 10)
-println(result)
+// Lambda / Closure
+let multiply = |x, y| x * y
 ```
-
-### Control Flow
-```vryn
-if age >= 18 {
-    println("Adult")
-} else {
-    println("Minor")
-}
-
-// Loops
-let mut i = 0
-while i < 5 {
-    println(i)
-    i = i + 1
-}
-
-// For loop
-for x in 0..10 {
-    println(x)
-}
-```
-
-### Arrays
-```vryn
-let numbers = [1, 2, 3, 4, 5]
-println(numbers[0]) // Access by index
-```
-
-## 🗺️ Roadmap
-
-*   **Phase 0:** Design & Specification ✅
-*   **Phase 1:** Core Compiler & Interpreter (MVP) 🚧 *(Current)*
-*   **Phase 2:** Standard Library (File I/O, Networking)
-*   **Phase 3:** Tooling (LSP, Formatter, Package Manager)
-*   **Phase 4:** Self-Hosting (Rewriting Vryn in Vryn)
 
 ## 🤝 Contributing
 
-Contributions are welcome! If you're interested in language design or compiler engineering:
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to get started.
 
-1.  Check the [Issues](https://github.com/vryn-lang/vryn/issues) for open tasks.
-2.  Read `CONTRIBUTING.md` (coming soon).
-3.  Fork the repo and submit a PR!
+Please adhere to our [Code of Conduct](CODE_OF_CONDUCT.md) in all interactions.
 
 ## 📄 License
 
-This project is licensed under the **MIT License**.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Community
+
+*   **Issues:** [GitHub Issues](https://github.com/webcoderspeed/vryn/issues)
+*   **Discussions:** [GitHub Discussions](https://github.com/webcoderspeed/vryn/discussions)
+
+---
+*Built with ❤️ in Rust.*
