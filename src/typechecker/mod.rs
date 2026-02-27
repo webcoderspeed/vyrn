@@ -519,6 +519,23 @@ impl TypeChecker {
                 Ok(())
             }
 
+            Statement::WhileLet { pattern: _, expr, body } => {
+                let _expr_type = self.infer_expr(expr)?;
+                let was_in_loop = self.in_loop;
+                self.in_loop = true;
+
+                self.env.push_scope();
+                for stmt in body {
+                    if let Err(e) = self.check_statement(stmt) {
+                        self.errors.push(e);
+                    }
+                }
+                self.env.pop_scope();
+
+                self.in_loop = was_in_loop;
+                Ok(())
+            }
+
             Statement::IfLet { pattern: _, expr, then_body, else_body } => {
                 let _expr_type = self.infer_expr(expr)?;
                 for stmt in then_body {

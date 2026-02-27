@@ -284,6 +284,33 @@ impl Interpreter {
                 Ok(Signal::None)
             }
 
+            Statement::WhileLet { pattern, expr, body } => {
+                loop {
+                    let val = self.eval_expression(expr)?;
+                    let mut bindings = HashMap::new();
+                    if !self.pattern_matches(&val, pattern, &mut bindings)? {
+                        break;
+                    }
+
+                    self.env.push_scope();
+                    for (name, value) in bindings {
+                        self.env.define(&name, value);
+                    }
+                    let mut should_break = false;
+                    for s in body {
+                        match self.exec_statement(s)? {
+                            Signal::Break => { should_break = true; break; }
+                            Signal::Continue => break,
+                            Signal::Return(v) => { self.env.pop_scope(); return Ok(Signal::Return(v)); }
+                            Signal::None => {}
+                        }
+                    }
+                    self.env.pop_scope();
+                    if should_break { break; }
+                }
+                Ok(Signal::None)
+            }
+
             Statement::For { var, iterable, body } => {
                 let iter_val = self.eval_expression(iterable)?;
                 match iter_val {
@@ -527,6 +554,486 @@ impl Interpreter {
                             let msg = self.eval_expression(&args[0])?;
                             return Err(format!("Panic: {}", msg));
                         }
+// String functions
+"str_len" => {
+    if args.len() != 1 {
+        return Err("str_len() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Str(s) => Ok(Value::Int(s.len() as i64)),
+        _ => Err("str_len() requires a string".to_string()),
+    };
+}
+"str_contains" => {
+    if args.len() != 2 {
+        return Err("str_contains() takes 2 arguments".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    let substr = self.eval_expression(&args[1])?;
+    return match (s, substr) {
+        (Value::Str(s), Value::Str(sub)) => Ok(Value::Bool(s.contains(&sub))),
+        _ => Err("str_contains() requires strings".to_string()),
+    };
+}
+"str_starts_with" => {
+    if args.len() != 2 {
+        return Err("str_starts_with() takes 2 arguments".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    let prefix = self.eval_expression(&args[1])?;
+    return match (s, prefix) {
+        (Value::Str(s), Value::Str(p)) => Ok(Value::Bool(s.starts_with(&p))),
+        _ => Err("str_starts_with() requires strings".to_string()),
+    };
+}
+"str_ends_with" => {
+    if args.len() != 2 {
+        return Err("str_ends_with() takes 2 arguments".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    let suffix = self.eval_expression(&args[1])?;
+    return match (s, suffix) {
+        (Value::Str(s), Value::Str(suf)) => Ok(Value::Bool(s.ends_with(&suf))),
+        _ => Err("str_ends_with() requires strings".to_string()),
+    };
+}
+"str_split" => {
+    if args.len() != 2 {
+        return Err("str_split() takes 2 arguments".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    let delim = self.eval_expression(&args[1])?;
+    return match (s, delim) {
+        (Value::Str(s), Value::Str(d)) => {
+            let parts: Vec<Value> = s.split(&d).map(|p| Value::Str(p.to_string())).collect();
+            Ok(Value::Array(parts))
+        }
+        _ => Err("str_split() requires strings".to_string()),
+    };
+}
+"str_trim" => {
+    if args.len() != 1 {
+        return Err("str_trim() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => Ok(Value::Str(s.trim().to_string())),
+        _ => Err("str_trim() requires a string".to_string()),
+    };
+}
+"str_upper" => {
+    if args.len() != 1 {
+        return Err("str_upper() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => Ok(Value::Str(s.to_uppercase())),
+        _ => Err("str_upper() requires a string".to_string()),
+    };
+}
+"str_lower" => {
+    if args.len() != 1 {
+        return Err("str_lower() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => Ok(Value::Str(s.to_lowercase())),
+        _ => Err("str_lower() requires a string".to_string()),
+    };
+}
+"str_replace" => {
+    if args.len() != 3 {
+        return Err("str_replace() takes 3 arguments".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    let from = self.eval_expression(&args[1])?;
+    let to = self.eval_expression(&args[2])?;
+    return match (s, from, to) {
+        (Value::Str(s), Value::Str(f), Value::Str(t)) => {
+            Ok(Value::Str(s.replace(&f, &t)))
+        }
+        _ => Err("str_replace() requires strings".to_string()),
+    };
+}
+"str_chars" => {
+    if args.len() != 1 {
+        return Err("str_chars() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => {
+            let chars: Vec<Value> = s.chars().map(|c| Value::Str(c.to_string())).collect();
+            Ok(Value::Array(chars))
+        }
+        _ => Err("str_chars() requires a string".to_string()),
+    };
+}
+"str_join" => {
+    if args.len() != 2 {
+        return Err("str_join() takes 2 arguments".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    let sep = self.eval_expression(&args[1])?;
+    return match (arr, sep) {
+        (Value::Array(a), Value::Str(s)) => {
+            let strs: Vec<String> = a.iter().map(|v| format!("{}", v)).collect();
+            Ok(Value::Str(strs.join(&s)))
+        }
+        _ => Err("str_join() requires an array and a string separator".to_string()),
+    };
+}
+"substr" => {
+    if args.len() != 3 {
+        return Err("substr() takes 3 arguments (string, start, length)".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    let start = self.eval_expression(&args[1])?;
+    let len = self.eval_expression(&args[2])?;
+    return match (s, start, len) {
+        (Value::Str(s), Value::Int(st), Value::Int(l)) => {
+            let st = st as usize;
+            let l = l as usize;
+            if st > s.len() {
+                Ok(Value::Str("".to_string()))
+            } else {
+                let end = std::cmp::min(st + l, s.len());
+                Ok(Value::Str(s[st..end].to_string()))
+            }
+        }
+        _ => Err("substr() requires a string and integers".to_string()),
+    };
+}
+// Array functions
+"pop" => {
+    if args.len() != 1 {
+        return Err("pop() takes exactly 1 argument".to_string());
+    }
+    let mut arr = self.eval_expression(&args[0])?;
+    return match &mut arr {
+        Value::Array(a) => {
+            if let Some(v) = a.pop() {
+                Ok(v)
+            } else {
+                Ok(Value::None)
+            }
+        }
+        _ => Err("pop() requires an array".to_string()),
+    };
+}
+"arr_len" => {
+    if args.len() != 1 {
+        return Err("arr_len() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Array(a) => Ok(Value::Int(a.len() as i64)),
+        _ => Err("arr_len() requires an array".to_string()),
+    };
+}
+"arr_reverse" => {
+    if args.len() != 1 {
+        return Err("arr_reverse() takes exactly 1 argument".to_string());
+    }
+    let mut arr = self.eval_expression(&args[0])?;
+    return match &mut arr {
+        Value::Array(a) => {
+            a.reverse();
+            Ok(arr)
+        }
+        _ => Err("arr_reverse() requires an array".to_string()),
+    };
+}
+"arr_contains" => {
+    if args.len() != 2 {
+        return Err("arr_contains() takes 2 arguments".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    let val = self.eval_expression(&args[1])?;
+    return match arr {
+        Value::Array(a) => {
+            let contains = a.iter().any(|v| {
+                match (v, &val) {
+                    (Value::Int(a), Value::Int(b)) => a == b,
+                    (Value::Float(a), Value::Float(b)) => (a - b).abs() < 1e-10,
+                    (Value::Str(a), Value::Str(b)) => a == b,
+                    (Value::Bool(a), Value::Bool(b)) => a == b,
+                    _ => false,
+                }
+            });
+            Ok(Value::Bool(contains))
+        }
+        _ => Err("arr_contains() requires an array".to_string()),
+    };
+}
+"arr_slice" => {
+    if args.len() != 3 {
+        return Err("arr_slice() takes 3 arguments (array, start, end)".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    let start = self.eval_expression(&args[1])?;
+    let end = self.eval_expression(&args[2])?;
+    return match (arr, start, end) {
+        (Value::Array(a), Value::Int(s), Value::Int(e)) => {
+            let s = s as usize;
+            let e = e as usize;
+            let e = std::cmp::min(e, a.len());
+            if s > a.len() || s >= e {
+                Ok(Value::Array(vec![]))
+            } else {
+                Ok(Value::Array(a[s..e].to_vec()))
+            }
+        }
+        _ => Err("arr_slice() requires an array and integers".to_string()),
+    };
+}
+"arr_sort" => {
+    if args.len() != 1 {
+        return Err("arr_sort() takes exactly 1 argument".to_string());
+    }
+    let mut arr = self.eval_expression(&args[0])?;
+    return match &mut arr {
+        Value::Array(a) => {
+            a.sort_by(|x, y| {
+                match (x, y) {
+                    (Value::Int(a), Value::Int(b)) => a.cmp(b),
+                    (Value::Float(a), Value::Float(b)) => {
+                        if a < b { std::cmp::Ordering::Less }
+                        else if a > b { std::cmp::Ordering::Greater }
+                        else { std::cmp::Ordering::Equal }
+                    }
+                    (Value::Str(a), Value::Str(b)) => a.cmp(b),
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+            Ok(arr)
+        }
+        _ => Err("arr_sort() requires an array".to_string()),
+    };
+}
+// Math functions
+"abs" => {
+    if args.len() != 1 {
+        return Err("abs() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Int(n) => Ok(Value::Int(n.abs())),
+        Value::Float(f) => Ok(Value::Float(f.abs())),
+        _ => Err("abs() requires a number".to_string()),
+    };
+}
+"min" => {
+    if args.len() != 2 {
+        return Err("min() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x.min(y))),
+        (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x.min(y))),
+        (Value::Int(x), Value::Float(y)) => Ok(Value::Float((x as f64).min(y))),
+        (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x.min(y as f64))),
+        _ => Err("min() requires numbers".to_string()),
+    };
+}
+"max" => {
+    if args.len() != 2 {
+        return Err("max() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x.max(y))),
+        (Value::Float(x), Value::Float(y)) => Ok(Value::Float(x.max(y))),
+        (Value::Int(x), Value::Float(y)) => Ok(Value::Float((x as f64).max(y))),
+        (Value::Float(x), Value::Int(y)) => Ok(Value::Float(x.max(y as f64))),
+        _ => Err("max() requires numbers".to_string()),
+    };
+}
+"floor" => {
+    if args.len() != 1 {
+        return Err("floor() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Int(f.floor() as i64)),
+        Value::Int(i) => Ok(Value::Int(i)),
+        _ => Err("floor() requires a number".to_string()),
+    };
+}
+"ceil" => {
+    if args.len() != 1 {
+        return Err("ceil() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Int(f.ceil() as i64)),
+        Value::Int(i) => Ok(Value::Int(i)),
+        _ => Err("ceil() requires a number".to_string()),
+    };
+}
+"round" => {
+    if args.len() != 1 {
+        return Err("round() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Int(f.round() as i64)),
+        Value::Int(i) => Ok(Value::Int(i)),
+        _ => Err("round() requires a number".to_string()),
+    };
+}
+"sqrt" => {
+    if args.len() != 1 {
+        return Err("sqrt() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.sqrt())),
+        Value::Int(i) => Ok(Value::Float((i as f64).sqrt())),
+        _ => Err("sqrt() requires a number".to_string()),
+    };
+}
+"pow" => {
+    if args.len() != 2 {
+        return Err("pow() takes 2 arguments".to_string());
+    }
+    let base = self.eval_expression(&args[0])?;
+    let exp = self.eval_expression(&args[1])?;
+    return match (base, exp) {
+        (Value::Float(b), Value::Float(e)) => Ok(Value::Float(b.powf(e))),
+        (Value::Int(b), Value::Int(e)) => {
+            if e >= 0 {
+                Ok(Value::Int(b.pow(e as u32)))
+            } else {
+                Ok(Value::Float((b as f64).powf(e as f64)))
+            }
+        }
+        (Value::Int(b), Value::Float(e)) => Ok(Value::Float((b as f64).powf(e))),
+        (Value::Float(b), Value::Int(e)) => Ok(Value::Float(b.powf(e as f64))),
+        _ => Err("pow() requires numbers".to_string()),
+    };
+}
+"random" => {
+    if !args.is_empty() {
+        return Err("random() takes no arguments".to_string());
+    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    let seed = nanos as f64 / 1_000_000_000.0;
+    return Ok(Value::Float(seed % 1.0));
+}
+"int" => {
+    if args.len() != 1 {
+        return Err("int() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Int(i) => Ok(Value::Int(i)),
+        Value::Float(f) => Ok(Value::Int(f as i64)),
+        Value::Str(s) => {
+            match s.parse::<i64>() {
+                Ok(i) => Ok(Value::Int(i)),
+                Err(_) => Err(format!("Cannot convert '{}' to int", s)),
+            }
+        }
+        Value::Bool(b) => Ok(Value::Int(if b { 1 } else { 0 })),
+        _ => Err("int() requires a convertible value".to_string()),
+    };
+}
+"float" => {
+    if args.len() != 1 {
+        return Err("float() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f)),
+        Value::Int(i) => Ok(Value::Float(i as f64)),
+        Value::Str(s) => {
+            match s.parse::<f64>() {
+                Ok(f) => Ok(Value::Float(f)),
+                Err(_) => Err(format!("Cannot convert '{}' to float", s)),
+            }
+        }
+        _ => Err("float() requires a convertible value".to_string()),
+    };
+}
+// I/O functions
+"input" => {
+    let prompt = if !args.is_empty() {
+        let p = self.eval_expression(&args[0])?;
+        match p {
+            Value::Str(s) => s,
+            _ => format!("{}", p),
+        }
+    } else {
+        String::new()
+    };
+    print!("{}", prompt);
+    use std::io::{self, BufRead};
+    let stdin = io::stdin();
+    let mut line = String::new();
+    match stdin.lock().read_line(&mut line) {
+        Ok(_) => {
+            if line.ends_with('\n') {
+                line.pop();
+                if line.ends_with('\r') {
+                    line.pop();
+                }
+            }
+            return Ok(Value::Str(line));
+        }
+        Err(e) => return Err(format!("Failed to read input: {}", e)),
+    }
+}
+"read_file" => {
+    if args.len() != 1 {
+        return Err("read_file() takes exactly 1 argument".to_string());
+    }
+    let path = self.eval_expression(&args[0])?;
+    return match path {
+        Value::Str(p) => {
+            match std::fs::read_to_string(&p) {
+                Ok(content) => Ok(Value::Str(content)),
+                Err(e) => Err(format!("Failed to read file '{}': {}", p, e)),
+            }
+        }
+        _ => Err("read_file() requires a string path".to_string()),
+    };
+}
+"write_file" => {
+    if args.len() != 2 {
+        return Err("write_file() takes 2 arguments".to_string());
+    }
+    let path = self.eval_expression(&args[0])?;
+    let content = self.eval_expression(&args[1])?;
+    return match (path, content) {
+        (Value::Str(p), c) => {
+            match std::fs::write(&p, format!("{}", c)) {
+                Ok(_) => Ok(Value::None),
+                Err(e) => Err(format!("Failed to write file '{}': {}", p, e)),
+            }
+        }
+        _ => Err("write_file() requires a string path and content".to_string()),
+    };
+}
+"file_exists" => {
+    if args.len() != 1 {
+        return Err("file_exists() takes exactly 1 argument".to_string());
+    }
+    let path = self.eval_expression(&args[0])?;
+    return match path {
+        Value::Str(p) => {
+            Ok(Value::Bool(std::path::Path::new(&p).exists()))
+        }
+        _ => Err("file_exists() requires a string path".to_string()),
+    };
+}
+
                         _ => {}
                     }
                 }
@@ -1055,15 +1562,23 @@ impl Interpreter {
                 }
                 Ok(false)
             }
-            Pattern::Guard { pattern, condition: _ } => {
+            Pattern::Guard { pattern, condition } => {
                 // First check if the pattern matches
                 if !self.pattern_matches(value, pattern, bindings)? {
                     return Ok(false);
                 }
                 // Then evaluate the guard condition with the bindings
-                // We'll handle guard evaluation later in match/if-let handlers
-                // For now, return true to indicate pattern matched; condition will be checked separately
-                Ok(true)
+                // We need to temporarily set the bindings in the environment to evaluate the condition
+                self.env.push_scope();
+                for (name, val) in bindings.iter() {
+                    self.env.define(name, val.clone());
+                }
+                let guard_result = match self.eval_expression(condition) {
+                    Ok(cond_value) => self.is_truthy(&cond_value),
+                    Err(_) => false,
+                };
+                self.env.pop_scope();
+                Ok(guard_result)
             }
         }
     }
@@ -1421,5 +1936,511 @@ mod tests {
         "#);
         assert!(result.is_ok());
         assert_eq!(output[0], "Ok(10)");
+    }
+    // String function tests
+    #[test]
+    fn test_str_len() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello"
+            println(str_len(s))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+    }
+    #[test]
+    fn test_str_contains() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(str_contains(s, "world"))
+            println(str_contains(s, "xyz"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+    #[test]
+    fn test_str_starts_with() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(str_starts_with(s, "hello"))
+            println(str_starts_with(s, "world"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+    #[test]
+    fn test_str_ends_with() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(str_ends_with(s, "world"))
+            println(str_ends_with(s, "hello"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+    #[test]
+    fn test_str_split() {
+        let (result, output) = run_vryn(r#"
+            let s = "a,b,c"
+            let parts = str_split(s, ",")
+            println(len(parts))
+            println(parts[0])
+            println(parts[2])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "a");
+        assert_eq!(output[2], "c");
+    }
+    #[test]
+    fn test_str_trim() {
+        let (result, output) = run_vryn(r#"
+            let s = "  hello  "
+            println(str_trim(s))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+    #[test]
+    fn test_str_upper() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello"
+            println(str_upper(s))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "HELLO");
+    }
+    #[test]
+    fn test_str_lower() {
+        let (result, output) = run_vryn(r#"
+            let s = "HELLO"
+            println(str_lower(s))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+    #[test]
+    fn test_str_replace() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            let replaced = str_replace(s, "world", "vryn")
+            println(replaced)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello vryn");
+    }
+    #[test]
+    fn test_str_chars() {
+        let (result, output) = run_vryn(r#"
+            let s = "abc"
+            let chars = str_chars(s)
+            println(len(chars))
+            println(chars[0])
+            println(chars[2])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "a");
+        assert_eq!(output[2], "c");
+    }
+    #[test]
+    fn test_str_join() {
+        let (result, output) = run_vryn(r#"
+            let arr = ["a", "b", "c"]
+            let joined = str_join(arr, "-")
+            println(joined)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "a-b-c");
+    }
+    #[test]
+    fn test_substr() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello"
+            println(substr(s, 0, 2))
+            println(substr(s, 1, 3))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "he");
+        assert_eq!(output[1], "ell");
+    }
+    // Array function tests
+    #[test]
+    fn test_pop() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            let popped = pop(arr)
+            println(popped)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+    }
+    #[test]
+    fn test_arr_len() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4]
+            println(arr_len(arr))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "4");
+    }
+    #[test]
+    fn test_arr_reverse() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            let reversed = arr_reverse(arr)
+            println(reversed[0])
+            println(reversed[2])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "1");
+    }
+    #[test]
+    fn test_arr_contains() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            println(arr_contains(arr, 2))
+            println(arr_contains(arr, 5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+    #[test]
+    fn test_arr_slice() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            let sliced = arr_slice(arr, 1, 4)
+            println(len(sliced))
+            println(sliced[0])
+            println(sliced[2])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "2");
+        assert_eq!(output[2], "4");
+    }
+    #[test]
+    fn test_arr_sort() {
+        let (result, output) = run_vryn(r#"
+            let arr = [3, 1, 4, 1, 5]
+            let sorted = arr_sort(arr)
+            println(sorted[0])
+            println(sorted[2])
+            println(sorted[4])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+        assert_eq!(output[1], "3");
+        assert_eq!(output[2], "5");
+    }
+    // Math function tests
+    #[test]
+    fn test_abs() {
+        let (result, output) = run_vryn(r#"
+            println(abs(-5))
+            println(abs(3))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "3");
+    }
+    #[test]
+    fn test_min_max() {
+        let (result, output) = run_vryn(r#"
+            println(min(5, 3))
+            println(max(5, 3))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "5");
+    }
+    #[test]
+    fn test_floor_ceil_round() {
+        let (result, output) = run_vryn(r#"
+            println(floor(3.7))
+            println(ceil(3.2))
+            println(round(3.5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "4");
+        assert_eq!(output[2], "4");
+    }
+    #[test]
+    fn test_sqrt() {
+        let (result, output) = run_vryn(r#"
+            println(sqrt(4.0))
+            println(sqrt(9.0))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+        assert_eq!(output[1], "3");
+    }
+    #[test]
+    fn test_pow() {
+        let (result, output) = run_vryn(r#"
+            println(pow(2, 3))
+            println(pow(5, 2))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "8");
+        assert_eq!(output[1], "25");
+    }
+    #[test]
+    fn test_int_conversion() {
+        let (result, output) = run_vryn(r#"
+            println(int(3.7))
+            println(int("42"))
+            println(int(true))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "42");
+        assert_eq!(output[2], "1");
+    }
+    #[test]
+    fn test_float_conversion() {
+        let (result, output) = run_vryn(r#"
+            println(float(42))
+            println(float("3.14"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+        assert_eq!(output[1], "3.14");
+    }
+
+
+    // === Phase 8: Pattern Matching Tests ===
+
+    #[test]
+    fn test_match_with_guard_simple() {
+        let (result, output) = run_vryn(r#"
+            let x = 5
+            match x {
+                1 => println("one")
+                2 => println("two")
+                n if n > 3 => println("big")
+                _ => println("other")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "big");
+    }
+
+    #[test]
+    fn test_match_with_guard_multiple() {
+        let (result, output) = run_vryn(r#"
+            let x = 15
+            match x {
+                n if n < 10 => println("small")
+                n if n >= 10 && n < 20 => println("large")
+                _ => println("huge")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "large");
+    }
+
+    #[test]
+    fn test_match_with_guard_no_match() {
+        let (result, output) = run_vryn(r#"
+            let x = 25
+            match x {
+                n if n < 5 => println("small")
+                n if n < 20 => println("medium")
+                n if n >= 20 => println("big")
+                _ => println("other")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "big");
+    }
+
+    #[test]
+    fn test_match_with_tuple_pattern() {
+        let (result, output) = run_vryn(r#"
+            let tuple = [1, 2]
+            match tuple {
+                (a, b) => println(a)
+                _ => println("no match")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+    }
+
+    #[test]
+    fn test_match_with_enum_variant_pattern() {
+        let (result, output) = run_vryn(r#"
+            enum Color {
+                Red
+                Green
+                Blue
+            }
+            let c = Color::Red
+            match c {
+                Color::Red => println("matched")
+                Color::Green => println("no")
+                Color::Blue => println("no")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "matched");
+    }
+
+    #[test]
+    fn test_match_with_wildcard() {
+        let (result, output) = run_vryn(r#"
+            let x = 100
+            match x {
+                1 => println("one")
+                2 => println("two")
+                _ => println("many")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "many");
+    }
+
+    #[test]
+    fn test_match_with_identifier_binding() {
+        let (result, output) = run_vryn(r#"
+            let x = 42
+            match x {
+                n => println(n)
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_match_with_or_pattern() {
+        let (result, output) = run_vryn(r#"
+            let x = 2
+            match x {
+                1 => println("one")
+                2 => println("two")
+                3 => println("three")
+                _ => println("large")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "two");
+    }
+
+    #[test]
+    fn test_match_with_range_pattern() {
+        let (result, output) = run_vryn(r#"
+            let x = 5
+            match x {
+                1 => println("one to three")
+                5 => println("match")
+                _ => println("other")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "match");
+    }
+
+    #[test]
+    fn test_guard_with_negation() {
+        let (result, output) = run_vryn(r#"
+            let x = 3
+            match x {
+                n if !(n > 5) => println("not big")
+                _ => println("big")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "not big");
+    }
+
+    #[test]
+    fn test_guard_chains() {
+        let (result, output) = run_vryn(r#"
+            let x = 10
+            match x {
+                n if n < 5 => println("tiny")
+                n if n < 10 => println("small")
+                n if n < 15 => println("medium")
+                _ => println("large")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "medium");
+    }
+
+    #[test]
+    fn test_match_with_literal_pattern() {
+        let (result, output) = run_vryn(r#"
+            let x = "hello"
+            match x {
+                "hello" => println("greeting")
+                "goodbye" => println("farewell")
+                _ => println("unknown")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "greeting");
+    }
+
+    #[test]
+    fn test_match_with_bool_pattern() {
+        let (result, output) = run_vryn(r#"
+            let b = true
+            match b {
+                true => println("yes")
+                false => println("no")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "yes");
+    }
+
+    #[test]
+    fn test_match_expression_returns_value() {
+        let (result, output) = run_vryn(r#"
+            let x = 5
+            let result = match x {
+                1 => 10
+                2 => 20
+                _ => 30
+            }
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "30");
+    }
+
+    #[test]
+    fn test_guard_with_variable_binding() {
+        let (result, output) = run_vryn(r#"
+            let x = 8
+            match x {
+                n if n > 5 && n < 10 => println("between 5 and 10")
+                _ => println("other")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "between 5 and 10");
+    }
+
+    #[test]
+    fn test_match_with_multiple_guards() {
+        let (result, output) = run_vryn(r#"
+            let x = 3
+            let y = 7
+            match x {
+                a if a == 3 => println("matched")
+                _ => println("not matched")
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "matched");
     }
 }

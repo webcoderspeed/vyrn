@@ -203,9 +203,21 @@ impl Parser {
     /// Parse: while condition { body }
     fn parse_while(&mut self) -> Result<Statement, String> {
         self.expect(TokenKind::While)?;
-        let condition = Box::new(self.parse_expression()?);
-        let body = self.parse_block()?;
-        Ok(Statement::While { condition, body })
+
+        // Check for "let" keyword to distinguish while-let from regular while
+        if self.check(&TokenKind::Let) {
+            self.advance();
+            let pattern = self.parse_pattern()?;
+            self.expect(TokenKind::Equal)?;
+            let expr = Box::new(self.parse_expression()?);
+            let body = self.parse_block()?;
+            Ok(Statement::WhileLet { pattern, expr, body })
+        } else {
+            // Regular while statement
+            let condition = Box::new(self.parse_expression()?);
+            let body = self.parse_block()?;
+            Ok(Statement::While { condition, body })
+        }
     }
 
     /// Parse: for var in iterable { body }

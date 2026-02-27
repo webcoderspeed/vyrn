@@ -56,6 +56,12 @@ pub enum Statement {
         condition: Box<Expression>,
         body: Vec<Statement>,
     },
+    /// while let pattern = expr { body }
+    WhileLet {
+        pattern: Pattern,
+        expr: Box<Expression>,
+        body: Vec<Statement>,
+    },
     /// for var in iterable { body }
     For {
         var: String,
