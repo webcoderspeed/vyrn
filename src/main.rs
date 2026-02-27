@@ -7,6 +7,7 @@ mod package;
 mod ccodegen;
 mod docgen;
 mod lsp;
+mod wasmgen;
 
 use std::env;
 use std::fs;
@@ -18,6 +19,7 @@ use codegen::Interpreter;
 use typechecker::TypeChecker;
 use formatter::Formatter;
 use lsp::VrynAnalyzer;
+use wasmgen::WasmCodeGen;
 
 const VERSION: &str = "0.1.0-alpha";
 
@@ -108,6 +110,13 @@ fn main() {
             }
             generate_docs(&args[2]);
         }
+        "wasm" => {
+            if args.len() < 3 {
+                eprintln!("Usage: vryn wasm <file.vn>");
+                std::process::exit(1);
+            }
+            generate_wasm(&args[2]);
+        }
         other => {
             if other.ends_with(".vn") {
                 run_file(other);
@@ -136,6 +145,7 @@ fn print_usage() {
     test [file.vn]    Run test functions (test_*)
     fmt <file.vn>     Format code with 4-space indentation
     doc <file.vn>     Generate HTML/Markdown documentation
+    wasm <file.vn>    Generate WebAssembly (WAT) code
     repl              Start interactive REPL
     check <file.vn>   Type-check without running
     version           Show version info
@@ -670,6 +680,50 @@ fn generate_docs(filepath: &str) {
         }
         Err(e) => {
             eprintln!("[31merror:[0m Could not write to file '{}': {}", md_filepath, e);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn generate_wasm(filepath: &str) {
+    let content = match fs::read_to_string(filepath) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[31merror:[0m Could not read file '{}': {}", filepath, e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut lexer = Lexer::new(&content);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("[31merror[Lexer]:[0m {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let program = match parser.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[31merror[Parser]:[0m {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Generate WebAssembly
+    let mut codegen = WasmCodeGen::new();
+    let wat_code = codegen.generate(&program);
+
+    // Write to .wat file
+    let wat_filepath = filepath.replace(".vn", ".wat");
+    match fs::write(&wat_filepath, &wat_code) {
+        Ok(_) => {
+            println!("[32m✓[0m Generated WebAssembly in '{}'", wat_filepath);
+        }
+        Err(e) => {
+            eprintln!("[31merror:[0m Could not write to file '{}': {}", wat_filepath, e);
             std::process::exit(1);
         }
     }

@@ -1387,6 +1387,193 @@ impl Interpreter {
     };
 }
 
+// ============ PHASE 26: Macro System (Foundation) ============
+"macro_stringify" => {
+    if args.len() != 1 {
+        return Err("macro_stringify() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Str(format!("{}", val)));
+}
+"macro_concat" => {
+    if args.len() != 2 {
+        return Err("macro_concat() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return Ok(Value::Str(format!("{}{}", a, b)));
+}
+"macro_line" => {
+    if !args.is_empty() {
+        return Err("macro_line() takes no arguments".to_string());
+    }
+    // Return a simple line counter (in a real implementation, this would track source positions)
+    return Ok(Value::Int(1));
+}
+"macro_file" => {
+    if !args.is_empty() {
+        return Err("macro_file() takes no arguments".to_string());
+    }
+    // Return current file name (would be passed from parser in real implementation)
+    return Ok(Value::Str("current_file".to_string()));
+}
+"macro_assert_type" => {
+    if args.len() != 2 {
+        return Err("macro_assert_type() takes 2 arguments".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    let expected_type = self.eval_expression(&args[1])?;
+
+    let actual_type = match &val {
+        Value::Int(_) => "i64",
+        Value::Float(_) => "f64",
+        Value::Str(_) => "str",
+        Value::Bool(_) => "bool",
+        Value::Array(_) => "array",
+        Value::None => "None",
+        Value::Function { .. } => "fn",
+        Value::Struct { .. } => "struct",
+        Value::EnumType { .. } => "enum",
+        Value::Variant { .. } => "variant",
+        Value::Result { .. } => "Result",
+        Value::Future { .. } => "future",
+        Value::Channel { .. } => "channel",
+        Value::TaskHandle { .. } => "task_handle",
+    };
+
+    return match expected_type {
+        Value::Str(expected) => {
+            if actual_type == expected.as_str() {
+                Ok(Value::Bool(true))
+            } else {
+                Err(format!("Type assertion failed: expected {}, got {}", expected, actual_type))
+            }
+        }
+        _ => Err("macro_assert_type() requires a string as second argument".to_string()),
+    };
+}
+
+// ============ PHASE 30: Web Framework (Foundation) ============
+"http_get" => {
+    if args.len() != 1 {
+        return Err("http_get() takes exactly 1 argument".to_string());
+    }
+    let url = self.eval_expression(&args[0])?;
+    return match url {
+        Value::Str(u) => {
+            match std::process::Command::new("curl")
+                .arg("-s")
+                .arg(&u)
+                .output() {
+                Ok(output) => {
+                    let body = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(Value::Str(body))
+                }
+                Err(e) => Err(format!("http_get() failed: {}", e)),
+            }
+        }
+        _ => Err("http_get() requires a string URL".to_string()),
+    };
+}
+"http_status" => {
+    if args.len() != 1 {
+        return Err("http_status() takes exactly 1 argument".to_string());
+    }
+    let url = self.eval_expression(&args[0])?;
+    return match url {
+        Value::Str(u) => {
+            match std::process::Command::new("curl")
+                .arg("-s")
+                .arg("-o")
+                .arg("/dev/null")
+                .arg("-w")
+                .arg("%{http_code}")
+                .arg(&u)
+                .output() {
+                Ok(output) => {
+                    let status_str = String::from_utf8_lossy(&output.stdout).to_string();
+                    match status_str.trim().parse::<i64>() {
+                        Ok(code) => Ok(Value::Int(code)),
+                        Err(_) => Err("Failed to parse HTTP status code".to_string()),
+                    }
+                }
+                Err(e) => Err(format!("http_status() failed: {}", e)),
+            }
+        }
+        _ => Err("http_status() requires a string URL".to_string()),
+    };
+}
+"url_encode" => {
+    if args.len() != 1 {
+        return Err("url_encode() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => {
+            let encoded = s.chars().map(|c| {
+                match c {
+                    'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+                    ' ' => "+".to_string(),
+                    _ => format!("%{:02X}", c as u8),
+                }
+            }).collect::<String>();
+            Ok(Value::Str(encoded))
+        }
+        _ => Err("url_encode() requires a string".to_string()),
+    };
+}
+"url_decode" => {
+    if args.len() != 1 {
+        return Err("url_decode() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => {
+            let mut decoded = String::new();
+            let mut chars = s.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '%' {
+                    let hex: String = chars.by_ref().take(2).collect();
+                    if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                        decoded.push(byte as char);
+                    } else {
+                        decoded.push(c);
+                    }
+                } else if c == '+' {
+                    decoded.push(' ');
+                } else {
+                    decoded.push(c);
+                }
+            }
+            Ok(Value::Str(decoded))
+        }
+        _ => Err("url_decode() requires a string".to_string()),
+    };
+}
+"html_escape" => {
+    if args.len() != 1 {
+        return Err("html_escape() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(s) => {
+            let escaped = s.chars().map(|c| {
+                match c {
+                    '&' => "&amp;".to_string(),
+                    '<' => "&lt;".to_string(),
+                    '>' => "&gt;".to_string(),
+                    '"' => "&quot;".to_string(),
+                    '\'' => "&#39;".to_string(),
+                    _ => c.to_string(),
+                }
+            }).collect::<String>();
+            Ok(Value::Str(escaped))
+        }
+        _ => Err("html_escape() requires a string".to_string()),
+    };
+}
+
+
                         _ => {}
                     }
                 }
@@ -4680,5 +4867,159 @@ mod tests {
         assert_eq!(output[0], "true");
     }
 
+
+
+    // ============ PHASE 26: Macro System Tests ============
+    #[test]
+    fn test_macro_stringify_int() {
+        let (result, output) = run_vryn(r#"
+            let str_val = macro_stringify(42)
+            println(str_val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_macro_stringify_string() {
+        let (result, output) = run_vryn(r#"
+            let str_val = macro_stringify("hello")
+            println(str_val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_macro_concat_strings() {
+        let (result, output) = run_vryn(r#"
+            let concat = macro_concat("hello", "world")
+            println(concat)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "helloworld");
+    }
+
+    #[test]
+    fn test_macro_concat_mixed() {
+        let (result, output) = run_vryn(r#"
+            let concat = macro_concat(42, "test")
+            println(concat)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42test");
+    }
+
+    #[test]
+    fn test_macro_line() {
+        let (result, output) = run_vryn(r#"
+            let line = macro_line()
+            let is_int = type_of(line)
+            println(is_int)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "i64");
+    }
+
+    #[test]
+    fn test_macro_file() {
+        let (result, output) = run_vryn(r#"
+            let file = macro_file()
+            let is_str = type_of(file)
+            println(is_str)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "str");
+    }
+
+    #[test]
+    fn test_macro_assert_type_success() {
+        let (result, output) = run_vryn(r#"
+            let is_valid = macro_assert_type(42, "i64")
+            println(is_valid)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_macro_assert_type_failure() {
+        let (result, output) = run_vryn(r#"
+            let is_valid = macro_assert_type("hello", "i64")
+            println(is_valid)
+        "#);
+        assert!(result.is_err());
+    }
+
+    // ============ PHASE 30: Web Framework Tests ============
+    #[test]
+    fn test_url_encode_basic() {
+        let (result, output) = run_vryn(r#"
+            let encoded = url_encode("hello world")
+            println(encoded)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello+world");
+    }
+
+    #[test]
+    fn test_url_encode_special() {
+        let (result, output) = run_vryn(r#"
+            let encoded = url_encode("hello&world")
+            println(encoded)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("%26"));
+    }
+
+    #[test]
+    fn test_url_decode_basic() {
+        let (result, output) = run_vryn(r#"
+            let decoded = url_decode("hello+world")
+            println(decoded)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello world");
+    }
+
+    #[test]
+    fn test_url_decode_percent() {
+        let (result, output) = run_vryn(r#"
+            let decoded = url_decode("hello%20world")
+            println(decoded)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello world");
+    }
+
+    #[test]
+    fn test_html_escape_ampersand() {
+        let (result, output) = run_vryn(r#"
+            let escaped = html_escape("A & B")
+            println(escaped)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "A &amp; B");
+    }
+
+    #[test]
+    fn test_html_escape_tags() {
+        let (result, output) = run_vryn(r#"
+            let escaped = html_escape("<div>test</div>")
+            println(escaped)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "&lt;div&gt;test&lt;/div&gt;");
+    }
+
+    #[test]
+    fn test_html_escape_quotes() {
+        let (result, output) = run_vryn(r#"
+            let escaped = html_escape("He said \"hello\"")
+            println(escaped)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("&quot;"));
+    }
 
 }
