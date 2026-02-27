@@ -1,119 +1,578 @@
-// Vryn - Feature Showcase
+// ============================================================================
+// Vryn Language Feature Showcase
+// ============================================================================
 // "C ki speed, Python ki simplicity, Rust ki safety, Java ki universality"
-// NO type annotations needed! Simple like Python, powerful like Rust.
+// A comprehensive demonstration of Vryn's 175+ built-in functions and features
+// ============================================================================
 
 fun main() {
-    println("Hello, Vryn!")
-
-    // Variables: let (immutable) and var (mutable)
+    greeting()
+    println("")
+    
+    // ========================================================================
+    // SECTION 1: BASIC SYNTAX & VARIABLES
+    // ========================================================================
+    println("=== BASIC SYNTAX ===")
+    
+    // Variables: let (immutable by default)
     let name = "Sanjeev"
+    println(str_format("Hello, {}", name))
+    
+    // Variables: var (mutable)
     var count = 0
-
-    // Constants
-    const MAX = 100
-
-    // Math — simple!
-    let result = add(5, 3)
-    println(result)
-    println(fib(10))
-
-    // Mutable variable with loops
-    while count < 5 {
-        count = count + 1
+    count = count + 1
+    println(str_format("Count: {}", count))
+    
+    // Constants: compile-time values
+    const MAX_ATTEMPTS = 100
+    const PI = 3.14159265
+    println(str_format("Max attempts: {}", MAX_ATTEMPTS))
+    println(str_format("Pi = {}", PI))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 2: MATH & ARITHMETIC
+    // ========================================================================
+    println("=== MATH FUNCTIONS ===")
+    
+    let a = 10
+    let b = 20
+    
+    println(str_format("Max of {} and {}: {}", a, b, max(a, b)))
+    println(str_format("Min of {} and {}: {}", a, b, min(a, b)))
+    println(str_format("Absolute value of -42: {}", abs(-42)))
+    
+    let sqrt_val = sqrt(16.0)
+    println(str_format("Square root of 16: {}", sqrt_val))
+    
+    let pow_val = pow(2.0, 8.0)
+    println(str_format("2 to the power of 8: {}", pow_val))
+    
+    println(str_format("Floor of 3.7: {}", floor(3.7)))
+    println(str_format("Ceil of 3.2: {}", ceil(3.2)))
+    println(str_format("Round of 3.5: {}", round(3.5)))
+    
+    // Trigonometric functions
+    println(str_format("sin(π/2) = {}", math_sin(math_pi / 2.0)))
+    println(str_format("cos(0) = {}", math_cos(0.0)))
+    println(str_format("tan(π/4) = {}", math_tan(math_pi / 4.0)))
+    
+    println(str_format("e = {}", math_e))
+    println(str_format("log(e) = {}", math_log(math_e)))
+    println(str_format("exp(1) = {}", math_exp(1.0)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 3: STRING OPERATIONS
+    // ========================================================================
+    println("=== STRING FUNCTIONS ===")
+    
+    let text = "  Hello, Vryn!  "
+    
+    println(str_format("Original: '{}'", text))
+    println(str_format("Trimmed: '{}'", str_trim(text)))
+    println(str_format("Uppercase: '{}'", str_upper(text)))
+    println(str_format("Lowercase: '{}'", str_lower(text)))
+    println(str_format("Length: {}", str_len(text)))
+    
+    let haystack = "The quick brown fox jumps"
+    let needle = "brown"
+    println(str_format("Contains '{}' in '{}'? {}", needle, haystack, str_contains(haystack, needle)))
+    
+    println(str_format("Starts with 'The'? {}", str_starts_with(haystack, "The")))
+    println(str_format("Ends with 'jumps'? {}", str_ends_with(haystack, "jumps")))
+    
+    // String replacement
+    let original = "hello world hello"
+    let replaced = str_replace(original, "hello", "hi")
+    println(str_format("Replace 'hello' with 'hi': {}", replaced))
+    
+    // String character operations
+    println(str_format("Character at index 0: {}", chr(ord(text))))
+    
+    // Substring
+    let sub = substr(text, 0, 5)
+    println(str_format("Substring(0, 5): '{}'", sub))
+    
+    // Character functions
+    println(str_format("Character code of 'A': {}", ord("A")))
+    println(str_format("Character from code 65: {}", chr(65)))
+    
+    // String formatting
+    let formatted = str_format("Name: {}, Age: {}, Score: {}", name, 25, 98.5)
+    println(formatted)
+    
+    // String lines
+    let multiline = "line1\nline2\nline3"
+    println(str_format("Lines in text: {}", len(str_lines(multiline))))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 4: ARRAY OPERATIONS
+    // ========================================================================
+    println("=== ARRAY FUNCTIONS ===")
+    
+    let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    
+    println(str_format("Array: {}", len(numbers)))
+    println(str_format("First element: {}", numbers[0]))
+    println(str_format("Last element: {}", numbers[len(numbers) - 1]))
+    
+    println(str_format("Array contains 5? {}", arr_contains(numbers, 5)))
+    println(str_format("Array contains 99? {}", arr_contains(numbers, 99)))
+    
+    // Array statistics
+    println(str_format("Sum: {}", arr_sum(numbers)))
+    println(str_format("Min: {}", arr_min(numbers)))
+    println(str_format("Max: {}", arr_max(numbers)))
+    
+    // Array slicing
+    let slice = arr_slice(numbers, 2, 5)
+    println(str_format("Slice [2:5]: {}", len(slice)))
+    
+    // Array unique
+    let dupes = [1, 2, 2, 3, 3, 3, 4]
+    let unique = arr_unique(dupes)
+    println(str_format("Unique elements: {}", len(unique)))
+    
+    // Array reverse
+    let reversed = arr_reverse(numbers)
+    println(str_format("Reversed (should be 10): {}", reversed[0]))
+    
+    // Array sort
+    let unsorted = [5, 2, 8, 1, 9]
+    let sorted = arr_sort(unsorted)
+    println(str_format("Sorted (should be 1): {}", sorted[0]))
+    
+    // Array join
+    let joined = arr_join(numbers, ", ")
+    println(str_format("Joined: {}", joined))
+    
+    // Array flatten
+    let nested = [[1, 2], [3, 4], [5]]
+    let flat = arr_flatten(nested)
+    println(str_format("Flattened length: {}", len(flat)))
+    
+    // Array chunking
+    let chunks = arr_chunk(numbers, 3)
+    println(str_format("Chunks of 3: {}", len(chunks)))
+    
+    // Array enumeration
+    let enumerated = arr_enumerate(numbers)
+    println(str_format("Enumerated count: {}", len(enumerated)))
+    
+    // Array skip and take
+    let skipped = arr_skip(numbers, 5)
+    println(str_format("After skipping 5: {}", len(skipped)))
+    
+    let taken = arr_take(numbers, 3)
+    println(str_format("Taking first 3: {}", len(taken)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 5: CONTROL FLOW
+    // ========================================================================
+    println("=== CONTROL FLOW ===")
+    
+    // If-else
+    let score = 85
+    let grade = if score >= 90 {
+        "A"
+    } else if score >= 80 {
+        "B"
+    } else if score >= 70 {
+        "C"
+    } else {
+        "F"
     }
-
-    // Arrays
-    let arr = [10, 20, 30, 40, 50]
-    println(arr[2])
-    println(len(arr))
-
+    println(str_format("Score {} = Grade {}", score, grade))
+    
+    // While loop
+    var i = 0
+    var sum = 0
+    while i < 5 {
+        sum = sum + i
+        i = i + 1
+    }
+    println(str_format("Sum of 0..4: {}", sum))
+    
     // For loop with range
-    for i in 0..5 {
-        println(i)
+    println("Counting 1 to 5:")
+    for idx in 1..=5 {
+        println(idx)
     }
-
-    // String functions
-    println(str_upper("vryn"))
-    println(str_trim("  hello  "))
-    println(str_contains("hello world", "world"))
-
-    // Math functions
-    println(sqrt(16.0))
-    println(abs(-42))
-    println(max(10, 20))
-
-    // Error handling
-    let safe = divide(10, 0)
-    if is_err(safe) {
-        println("Cannot divide by zero!")
-    }
-
+    
     // Pattern matching
-    let x = 42
-    let msg = match x {
-        0 => "zero",
-        1 => "one",
-        _ => "other",
+    let day = 3
+    let day_name = match day {
+        1 => "Monday",
+        2 => "Tuesday",
+        3 => "Wednesday",
+        4 => "Thursday",
+        5 => "Friday",
+        _ => "Weekend",
     }
-    println(msg)
-
-    // Struct + methods
-    let p = Point { x: 3, y: 4 }
-    println(p.sum())
+    println(str_format("Day {} is {}", day, day_name))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 6: TYPE CONVERSIONS
+    // ========================================================================
+    println("=== TYPE CONVERSIONS ===")
+    
+    let int_val = 42
+    let float_val = 3.14
+    let str_val = "100"
+    let bool_val = true
+    
+    println(str_format("To string: {}", to_string(int_val)))
+    println(str_format("To int: {}", to_int(str_val)))
+    println(str_format("To float: {}", to_float("3.14")))
+    println(str_format("To bool: {}", to_bool(1)))
+    
+    println(str_format("Type of 42: {}", type_of(42)))
+    println(str_format("Type of 3.14: {}", type_of(3.14)))
+    println(str_format("Type of 'hello': {}", type_of("hello")))
+    println(str_format("Type of true: {}", type_of(true)))
+    
+    // Numeric conversions with functions
+    println(str_format("Int: {}", int(3.7)))
+    println(str_format("Float: {}", float(42)))
+    println(str_format("Char: {}", char(65)))
+    
+    // String conversions
+    println(str_format("To binary: {}", to_binary(42)))
+    println(str_format("To hex: {}", to_hex(255)))
+    println(str_format("To octal: {}", to_octal(64)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 7: BITWISE OPERATIONS
+    // ========================================================================
+    println("=== BITWISE OPERATIONS ===")
+    
+    let x = 12  // 1100
+    let y = 10  // 1010
+    
+    println(str_format("Bitwise AND: {} & {} = {}", x, y, bitwise_and(x, y)))
+    println(str_format("Bitwise OR: {} | {} = {}", x, y, bitwise_or(x, y)))
+    println(str_format("Bitwise XOR: {} ^ {} = {}", x, y, bitwise_xor(x, y)))
+    println(str_format("Bitwise NOT: ~{} = {}", x, bitwise_not(x)))
+    println(str_format("Left shift: {} << 2 = {}", x, bitwise_shl(x, 2)))
+    println(str_format("Right shift: {} >> 1 = {}", x, bitwise_shr(x, 1)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 8: JSON OPERATIONS
+    // ========================================================================
+    println("=== JSON OPERATIONS ===")
+    
+    let json_str = json_encode([1, 2, 3])
+    println(str_format("Encoded: {}", json_str))
+    
+    let pretty = json_pretty(json_str)
+    println(str_format("Pretty: {}", pretty))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 9: DATA & STATISTICS
+    // ========================================================================
+    println("=== STATISTICS ===")
+    
+    let data = [10, 20, 30, 40, 50]
+    
+    println(str_format("Sum: {}", stats_sum(data)))
+    println(str_format("Mean: {}", stats_mean(data)))
+    println(str_format("Median: {}", stats_median(data)))
+    println(str_format("Min: {}", stats_min(data)))
+    println(str_format("Max: {}", stats_max(data)))
+    println(str_format("Range: {}", stats_range(data)))
+    println(str_format("Variance: {}", stats_variance(data)))
+    println(str_format("Std Dev: {}", stats_stddev(data)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 10: PLATFORM & SYSTEM INFO
+    // ========================================================================
+    println("=== PLATFORM INFO ===")
+    
+    println(str_format("OS: {}", platform_os()))
+    println(str_format("Family: {}", platform_family()))
+    println(str_format("Architecture: {}", platform_arch()))
+    println(str_format("Pointer Size: {}", platform_pointer_size()))
+    println(str_format("Endian: {}", platform_endian()))
+    println(str_format("CPU Cores: {}", platform_cores()))
+    
+    println(str_format("Hostname: {}", hostname()))
+    println(str_format("Current Dir: {}", cwd()))
+    println(str_format("PID: {}", getpid()))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 11: RANDOM NUMBERS
+    // ========================================================================
+    println("=== RANDOM NUMBERS ===")
+    
+    println(str_format("Random float [0,1): {}", random_float()))
+    println(str_format("Random int [0,100): {}", random_int(100)))
+    println(str_format("Generic random: {}", random()))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 12: VECTOR MATH & SCIENTIFIC COMPUTING
+    // ========================================================================
+    println("=== VECTOR MATH ===")
+    
+    let v1 = [1.0, 2.0, 3.0]
+    let v2 = [4.0, 5.0, 6.0]
+    
+    println(str_format("Vector v1 norm: {}", vec_norm(v1)))
+    println(str_format("Vector v2 norm: {}", vec_norm(v2)))
+    println(str_format("Dot product: {}", vec_dot(v1, v2)))
+    
+    let scaled = vec_scale(v1, 2.0)
+    println(str_format("v1 * 2 length: {}", len(scaled)))
+    
+    let normalized = vec_normalize(v1)
+    println(str_format("Normalized v1 length: {}", len(normalized)))
+    
+    let added = vec_add(v1, v2)
+    println(str_format("v1 + v2 length: {}", len(added)))
+    
+    let subbed = vec_sub(v2, v1)
+    println(str_format("v2 - v1 length: {}", len(subbed)))
+    
+    let product = vec_mul(v1, v2)
+    println(str_format("v1 * v2 elementwise length: {}", len(product)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 13: DATA STRUCTURES (KV Store)
+    // ========================================================================
+    println("=== KEY-VALUE STORE ===")
+    
+    let store = kv_new()
+    
+    kv_set(store, "name", "Vryn")
+    kv_set(store, "version", "1.0")
+    kv_set(store, "year", "2024")
+    
+    println(str_format("Value for 'name': {}", kv_get(store, "name")))
+    println(str_format("Has 'version'? {}", kv_has(store, "version")))
+    println(str_format("KV length: {}", kv_len(store)))
+    
+    println(str_format("Keys count: {}", len(kv_keys(store))))
+    println(str_format("Values count: {}", len(kv_values(store))))
+    
+    kv_del(store, "year")
+    println(str_format("After delete: {}", kv_len(store)))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 14: URL & HTML ENCODING
+    // ========================================================================
+    println("=== URL & HTML ===")
+    
+    let url = "Hello World"
+    let encoded_url = url_encode(url)
+    println(str_format("URL encoded: {}", encoded_url))
+    
+    let html = "<script>alert('xss')</script>"
+    let safe_html = html_escape(html)
+    println(str_format("HTML escaped: {}", safe_html))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 15: HASHING & BINARY
+    // ========================================================================
+    println("=== HASHING & BINARY ===")
+    
+    let text_to_hash = "Vryn"
+    let hash = hash_simple(text_to_hash)
+    println(str_format("Hash of '{}': {}", text_to_hash, hash))
+    
+    let text_bytes = byte_array(text_to_hash)
+    println(str_format("Byte array length: {}", len(text_bytes)))
+    
+    let restored = bytes_to_str(text_bytes)
+    println(str_format("Restored from bytes: {}", restored))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 16: TIMING & TIME
+    // ========================================================================
+    println("=== TIME FUNCTIONS ===")
+    
+    let start_time = time_now()
+    println(str_format("Current time: {}", start_time))
+    
+    sleep_ms(100)
+    let end_time = time_now()
+    
+    println(str_format("After 100ms sleep, new time: {}", end_time))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 17: ASSERTIONS & TESTING
+    // ========================================================================
+    println("=== TESTING ===")
+    
+    assert_eq(add(2, 3), 5)
+    assert_eq(multiply(4, 5), 20)
+    assert_ne(10, 20)
+    
+    println("All assertions passed!")
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 18: STRUCTURES & TRAITS
+    // ========================================================================
+    println("=== STRUCTS & METHODS ===")
+    
+    let point = Point { x: 3, y: 4 }
+    println(str_format("Point distance: {}", point.distance()))
+    
+    let circle = Circle { x: 0, y: 0, radius: 5 }
+    println(str_format("Circle area: {}", circle.area()))
+    
+    println("")
+    
+    // ========================================================================
+    // SECTION 19: RANGE OPERATIONS
+    // ========================================================================
+    println("=== RANGE OPERATIONS ===")
+    
+    let range1 = range_arr(0, 10)
+    println(str_format("Range 0..10 length: {}", len(range1)))
+    
+    let range2 = arange(0, 20, 5)
+    println(str_format("Arange 0..20 step 5 length: {}", len(range2)))
+    
+    let lin = linspace(0, 10, 5)
+    println(str_format("Linspace 0..10 (5 points): {}", len(lin)))
+    
+    println("")
+    
+    // ========================================================================
+    // SUMMARY
+    // ========================================================================
+    println("=== SUMMARY ===")
+    println("Vryn demonstrates:")
+    println("- 175+ built-in functions")
+    println("- Multiple data types (int, float, string, bool, arrays)")
+    println("- Comprehensive standard library")
+    println("- Control flow (if/else, loops, pattern matching)")
+    println("- Type conversions and introspection")
+    println("- Mathematical and scientific computing")
+    println("- String and array manipulation")
+    println("- Data structures (KV store, vectors)")
+    println("- Platform and system information")
+    println("")
+    farewell()
 }
 
-// Simple functions — no types needed!
+// ============================================================================
+// SECTION 20: HELPER FUNCTIONS AND STRUCTURES
+// ============================================================================
+
+// Simple helper functions
 fun add(a, b) {
     return a + b
 }
 
-fun fib(n) {
+fun multiply(a, b) {
+    return a * b
+}
+
+fun fibonacci(n) {
     if n <= 1 { return n }
-    return fib(n - 1) + fib(n - 2)
+    return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
-// Optional type annotations when you want them
-fun divide(a: int, b: int) {
-    if b == 0 { return Err("Cannot divide by zero!") }
-    return Ok(a / b)
-}
-
-// Structs with impl blocks
+// Struct with methods
 struct Point {
     x: int,
     y: int,
 }
 
 impl Point {
+    fun distance(self) {
+        let dx = to_float(self.x)
+        let dy = to_float(self.y)
+        return sqrt(pow(dx, 2.0) + pow(dy, 2.0))
+    }
+    
     fun sum(self) {
         return self.x + self.y
     }
 }
 
-// Traits
-trait Describable {
-    fun describe(self) -> str
+struct Circle {
+    x: int,
+    y: int,
+    radius: int,
 }
 
-impl Describable for Point {
-    fun describe(self) {
-        return "A point"
+impl Circle {
+    fun area(self) {
+        let r = to_float(self.radius)
+        return math_pi * pow(r, 2.0)
     }
 }
 
-// Async functions
-async fun fetch(url) {
+// Trait example
+trait Drawable {
+    fun draw(self)
+}
+
+impl Drawable for Point {
+    fun draw(self) {
+        println("Drawing point")
+    }
+}
+
+// Error handling examples (async functions)
+async fun fetch_data(url) {
+    println(str_format("Fetching from: {}", url))
     return 42
 }
 
-// Test functions (run with: vryn test hello.vn)
+// Test functions (can be run with: vryn test hello.vn)
 fun test_add() {
     assert_eq(add(2, 3), 5)
-    assert_ne(add(2, 3), 6)
+    assert_eq(add(-1, 1), 0)
+    assert_ne(add(1, 1), 3)
 }
 
-fun test_fib() {
-    assert_eq(fib(0), 0)
-    assert_eq(fib(1), 1)
-    assert_eq(fib(10), 55)
+fun test_multiply() {
+    assert_eq(multiply(4, 5), 20)
+    assert_eq(multiply(0, 100), 0)
+}
+
+fun test_fibonacci() {
+    assert_eq(fibonacci(0), 0)
+    assert_eq(fibonacci(1), 1)
+    assert_eq(fibonacci(6), 8)
+}
+
+fun test_point() {
+    let p = Point { x: 3, y: 4 }
+    assert_eq(p.sum(), 7)
 }

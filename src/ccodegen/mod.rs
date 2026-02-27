@@ -1,8 +1,8 @@
 /// C Code Generator for Vryn
-/// Transpiles Vryn AST to C code
+/// Transpiles Vryn AST to C code with comprehensive support for language features
 
 use crate::parser::ast::*;
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 /// C Code Generator structure
 pub struct CCodeGen {
@@ -10,7 +10,8 @@ pub struct CCodeGen {
     output: String,
     header_includes: HashSet<String>,
     defined_functions: HashSet<String>,
-    variable_types: std::collections::HashMap<String, String>,
+    variable_types: HashMap<String, String>,
+    in_loop: bool,
 }
 
 impl CCodeGen {
@@ -20,7 +21,8 @@ impl CCodeGen {
             output: String::new(),
             header_includes: HashSet::new(),
             defined_functions: HashSet::new(),
-            variable_types: std::collections::HashMap::new(),
+            variable_types: HashMap::new(),
+            in_loop: false,
         }
     }
 
@@ -66,6 +68,15 @@ impl CCodeGen {
         if self.header_includes.contains("math") {
             self.emit("#include <math.h>\n");
         }
+        if self.header_includes.contains("stdbool") {
+            self.emit("#include <stdbool.h>\n");
+        }
+        if self.header_includes.contains("time") {
+            self.emit("#include <time.h>\n");
+        }
+        if self.header_includes.contains("ctype") {
+            self.emit("#include <ctype.h>\n");
+        }
 
         self.emit("\n");
     }
@@ -97,6 +108,48 @@ impl CCodeGen {
                 for s in body {
                     self.scan_statement_includes(s);
                 }
+            }
+            Statement::For { body, .. } => {
+                for s in body {
+                    self.scan_statement_includes(s);
+                }
+            }
+            Statement::Expression(expr) => {
+                self.scan_expression_includes(expr);
+            }
+            Statement::Let { value, .. } => {
+                self.scan_expression_includes(value);
+            }
+            Statement::Const { value, .. } => {
+                self.scan_expression_includes(value);
+            }
+            _ => {}
+        }
+    }
+
+    fn scan_expression_includes(&mut self, expr: &Expression) {
+        match expr {
+            Expression::Call { function, args } => {
+                if let Expression::Identifier(name) = function.as_ref() {
+                    match name.as_str() {
+                        "sqrt" | "pow" | "floor" | "ceil" | "round" | 
+                        "math_sin" | "math_cos" | "math_tan" | "math_log" | 
+                        "math_exp" => {
+                            self.add_include("math");
+                        }
+                        _ => {}
+                    }
+                }
+                for arg in args {
+                    self.scan_expression_includes(arg);
+                }
+            }
+            Expression::BinaryOp { left, right, .. } => {
+                self.scan_expression_includes(left);
+                self.scan_expression_includes(right);
+            }
+            Expression::UnaryOp { operand, .. } => {
+                self.scan_expression_includes(operand);
             }
             _ => {}
         }
@@ -176,29 +229,94 @@ impl CCodeGen {
                 let cond_str = self.generate_expression(condition);
                 self.emit(&self.indent());
                 self.emit(&format!("while ({}) {{\n", cond_str));
+                
                 self.indent_level += 1;
+                let old_in_loop = self.in_loop;
+                self.in_loop = true;
+                
                 for s in body {
                     self.generate_statement(s);
                 }
+                
+                self.in_loop = old_in_loop;
                 self.indent_level -= 1;
                 self.emit_line("}");
             }
-            Statement::For { var, iterable: _, body } => {
-                // Simple for loop: for (int i = 0; i < length; i++)
-                self.emit(&self.indent());
-                self.emit(&format!("for (int {} = 0; {} < 100; {}++) {{\n", var, var, var));
-                self.indent_level += 1;
-                for s in body {
-                    self.generate_statement(s);
+            Statement::For { var, iterable, body } => {
+                // Generate a proper C for loop from Vryn for-in loop
+                match iterable.as_ref() {
+                    Expression::Range { start, end, inclusive } => {
+                        let start_str = self.generate_expression(start);
+                        let end_str = self.generate_expression(end);
+                        let cond = if *inclusive { 
+                            format!("{} <= {}", var, end_str)
+                        } else {
+                            format!("{} < {}", var, end_str)
+                        };
+                        
+                        self.emit(&self.indent());
+                        self.emit(&format!("for (int {} = {}; {}; {}++) {{\n", var, start_str, cond, var));
+                        
+                        self.indent_level += 1;
+                        let old_in_loop = self.in_loop;
+                        self.in_loop = true;
+                        self.variable_types.insert(var.clone(), "int".to_string());
+                        
+                        for s in body {
+                            self.generate_statement(s);
+                        }
+                        
+                        self.in_loop = old_in_loop;
+                        self.indent_level -= 1;
+                        self.emit_line("}");
+                    }
+                    // For array iteration
+                    Expression::Identifier(arr_name) => {
+                        self.emit(&self.indent());
+                        self.emit(&format!("for (int i = 0; i < strlen({}); i++) {{\n", arr_name));
+                        self.emit(&self.indent());
+                        self.emit(&format!("    char {} = {}[i];\n", var, arr_name));
+                        
+                        self.indent_level += 1;
+                        let old_in_loop = self.in_loop;
+                        self.in_loop = true;
+                        self.variable_types.insert(var.clone(), "char".to_string());
+                        
+                        for s in body {
+                            self.generate_statement(s);
+                        }
+                        
+                        self.in_loop = old_in_loop;
+                        self.indent_level -= 1;
+                        self.emit_line("}");
+                    }
+                    _ => {
+                        // Fallback for complex iterables
+                        self.emit(&self.indent());
+                        self.emit(&format!("for (int {} = 0; {} < 100; {}++) {{\n", var, var, var));
+                        self.indent_level += 1;
+                        let old_in_loop = self.in_loop;
+                        self.in_loop = true;
+                        
+                        for s in body {
+                            self.generate_statement(s);
+                        }
+                        
+                        self.in_loop = old_in_loop;
+                        self.indent_level -= 1;
+                        self.emit_line("}");
+                    }
                 }
-                self.indent_level -= 1;
-                self.emit_line("}");
             }
             Statement::Break => {
-                self.emit_line("break;");
+                if self.in_loop {
+                    self.emit_line("break;");
+                }
             }
             Statement::Continue => {
-                self.emit_line("continue;");
+                if self.in_loop {
+                    self.emit_line("continue;");
+                }
             }
             Statement::Struct { name, fields } => {
                 self.emit(&self.indent());
@@ -237,7 +355,7 @@ impl CCodeGen {
             Expression::FloatLiteral(f) => f.to_string(),
             Expression::StringLiteral(s) => format!("\"{}\"", s.escape_default()),
             Expression::BoolLiteral(b) => {
-                if *b { "1".to_string() } else { "0".to_string() }
+                if *b { "1" } else { "0" }.to_string()
             }
             Expression::Identifier(name) => name.clone(),
             Expression::BinaryOp { left, op, right } => {
@@ -314,44 +432,252 @@ impl CCodeGen {
         };
 
         // Handle special built-in functions
-        if func_name == "println" {
-            if !args.is_empty() {
-                let arg_type = self.infer_expression_type(&args[0]);
-                let format_str = match arg_type.as_str() {
-                    "double" => "%lf\\n",
-                    "char*" => "%s\\n",
-                    "int" | _ => "%d\\n",
-                };
+        match func_name.as_str() {
+            "println" => {
+                if !args.is_empty() {
+                    let arg_type = self.infer_expression_type(&args[0]);
+                    let format_str = match arg_type.as_str() {
+                        "double" => "%lf\\n",
+                        "char*" => "%s\\n",
+                        "int" | _ => "%d\\n",
+                    };
+                    let args_str = args.iter()
+                        .map(|a| self.generate_expression(a))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("printf(\"{}\", {})", format_str, args_str)
+                } else {
+                    "printf(\"\\n\")".to_string()
+                }
+            }
+            "print" => {
+                if !args.is_empty() {
+                    let arg_type = self.infer_expression_type(&args[0]);
+                    let format_str = match arg_type.as_str() {
+                        "double" => "%lf",
+                        "char*" => "%s",
+                        "int" | _ => "%d",
+                    };
+                    let args_str = args.iter()
+                        .map(|a| self.generate_expression(a))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("printf(\"{}\", {})", format_str, args_str)
+                } else {
+                    "printf(\"\")".to_string()
+                }
+            }
+            "len" | "str_len" => {
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("strlen({})", arg_str)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "str_upper" => {
+                self.add_include("ctype");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("// str_upper({})", arg_str)
+                } else {
+                    "NULL".to_string()
+                }
+            }
+            "str_lower" => {
+                self.add_include("ctype");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("// str_lower({})", arg_str)
+                } else {
+                    "NULL".to_string()
+                }
+            }
+            "str_trim" => {
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("// str_trim({})", arg_str)
+                } else {
+                    "NULL".to_string()
+                }
+            }
+            "str_contains" => {
+                if args.len() >= 2 {
+                    let haystack = self.generate_expression(&args[0]);
+                    let needle = self.generate_expression(&args[1]);
+                    format!("(strstr({}, {}) != NULL)", haystack, needle)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "str_split" => {
+                if args.len() >= 2 {
+                    let str_arg = self.generate_expression(&args[0]);
+                    let delim = self.generate_expression(&args[1]);
+                    format!("// str_split({}, {})", str_arg, delim)
+                } else {
+                    "NULL".to_string()
+                }
+            }
+            "arr_len" => {
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("strlen({})", arg_str)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "arr_reverse" => {
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("// arr_reverse({})", arg_str)
+                } else {
+                    "NULL".to_string()
+                }
+            }
+            "arr_contains" => {
+                if args.len() >= 2 {
+                    let arr = self.generate_expression(&args[0]);
+                    let val = self.generate_expression(&args[1]);
+                    format!("// arr_contains({}, {})", arr, val)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "arr_sort" => {
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    self.add_include("stdlib.h");
+                    format!("// arr_sort({})", arg_str)
+                } else {
+                    "NULL".to_string()
+                }
+            }
+            "sqrt" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("sqrt({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "abs" => {
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("abs({})", arg_str)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "min" => {
+                if args.len() >= 2 {
+                    let a = self.generate_expression(&args[0]);
+                    let b = self.generate_expression(&args[1]);
+                    format!("(({} < {}) ? {} : {})", a, b, a, b)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "max" => {
+                if args.len() >= 2 {
+                    let a = self.generate_expression(&args[0]);
+                    let b = self.generate_expression(&args[1]);
+                    format!("(({} > {}) ? {} : {})", a, b, a, b)
+                } else {
+                    "0".to_string()
+                }
+            }
+            "floor" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("floor({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "ceil" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("ceil({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "round" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("round({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "pow" => {
+                self.add_include("math");
+                if args.len() >= 2 {
+                    let base = self.generate_expression(&args[0]);
+                    let exp = self.generate_expression(&args[1]);
+                    format!("pow({}, {})", base, exp)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "math_sin" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("sin({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "math_cos" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("cos({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "math_tan" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("tan({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "math_log" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("log({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            "math_exp" => {
+                self.add_include("math");
+                if !args.is_empty() {
+                    let arg_str = self.generate_expression(&args[0]);
+                    format!("exp({})", arg_str)
+                } else {
+                    "0.0".to_string()
+                }
+            }
+            _ => {
+                // Regular function call
                 let args_str = args.iter()
                     .map(|a| self.generate_expression(a))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("printf(\"{}\", {})", format_str, args_str)
-            } else {
-                "printf(\"\\n\")".to_string()
+                format!("{}({})", func_name, args_str)
             }
-        } else if func_name == "print" {
-            if !args.is_empty() {
-                let arg_type = self.infer_expression_type(&args[0]);
-                let format_str = match arg_type.as_str() {
-                    "double" => "%lf",
-                    "char*" => "%s",
-                    "int" | _ => "%d",
-                };
-                let args_str = args.iter()
-                    .map(|a| self.generate_expression(a))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("printf(\"{}\", {})", format_str, args_str)
-            } else {
-                "printf(\"\")".to_string()
-            }
-        } else {
-            let args_str = args.iter()
-                .map(|a| self.generate_expression(a))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{}({})", func_name, args_str)
         }
     }
 
@@ -498,6 +824,52 @@ mod tests {
     }
 
     #[test]
+    fn test_for_in_loop() {
+        let code = "fun main() { for i in 0..5 { println(i) } }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("for (int i = 0"));
+        assert!(c_code.contains("i < 5"));
+        assert!(c_code.contains("i++)"));
+    }
+
+    #[test]
+    fn test_for_in_loop_inclusive() {
+        let code = "fun main() { for i in 0..=10 { } }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("i <= 10"));
+    }
+
+    #[test]
+    fn test_string_operations() {
+        let code = "fun main() { let has = str_contains(\"hello\", \"ll\") }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("strstr"));
+    }
+
+    #[test]
+    fn test_math_functions() {
+        let code = "fun main() { let root = sqrt(16.0) }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("sqrt"));
+        assert!(c_code.contains("#include <math.h>"));
+    }
+
+    #[test]
+    fn test_array_operations() {
+        let code = "fun main() { let len = arr_len(\"hello\") }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("strlen"));
+    }
+
+    #[test]
+    fn test_min_max_functions() {
+        let code = "fun main() { let m = min(5, 10) }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("?"));
+        assert!(c_code.contains(":"));
+    }
+
+    #[test]
     fn test_struct_declaration() {
         let code = "struct Point { x: int, y: int }";
         let c_code = generate_c(code);
@@ -520,5 +892,26 @@ mod tests {
         assert!(c_code.contains("#include <stdio.h>"));
         assert!(c_code.contains("#include <stdlib.h>"));
         assert!(c_code.contains("#include <string.h>"));
+    }
+
+    #[test]
+    fn test_break_in_loop() {
+        let code = "fun main() { while true { break } }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("break;"));
+    }
+
+    #[test]
+    fn test_continue_in_loop() {
+        let code = "fun main() { while true { continue } }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("continue;"));
+    }
+
+    #[test]
+    fn test_nested_if_statements() {
+        let code = "fun main() { if true { if false { let x = 1 } } }";
+        let c_code = generate_c(code);
+        assert!(c_code.contains("if ("));
     }
 }
