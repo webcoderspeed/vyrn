@@ -1796,6 +1796,617 @@ impl Interpreter {
 }
 
 
+// ============ PHASE 35: AI/ML & Scientific Computing ============
+
+// Math Functions
+"math_pi" => {
+    if args.len() != 0 {
+        return Err("math_pi() takes no arguments".to_string());
+    }
+    return Ok(Value::Float(std::f64::consts::PI));
+}
+"math_e" => {
+    if args.len() != 0 {
+        return Err("math_e() takes no arguments".to_string());
+    }
+    return Ok(Value::Float(std::f64::consts::E));
+}
+"math_sin" => {
+    if args.len() != 1 {
+        return Err("math_sin() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.sin())),
+        Value::Int(i) => Ok(Value::Float((i as f64).sin())),
+        _ => Err("math_sin() requires a number".to_string()),
+    };
+}
+"math_cos" => {
+    if args.len() != 1 {
+        return Err("math_cos() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.cos())),
+        Value::Int(i) => Ok(Value::Float((i as f64).cos())),
+        _ => Err("math_cos() requires a number".to_string()),
+    };
+}
+"math_tan" => {
+    if args.len() != 1 {
+        return Err("math_tan() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.tan())),
+        Value::Int(i) => Ok(Value::Float((i as f64).tan())),
+        _ => Err("math_tan() requires a number".to_string()),
+    };
+}
+"math_log" => {
+    if args.len() != 1 {
+        return Err("math_log() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.ln())),
+        Value::Int(i) => Ok(Value::Float((i as f64).ln())),
+        _ => Err("math_log() requires a number".to_string()),
+    };
+}
+"math_log10" => {
+    if args.len() != 1 {
+        return Err("math_log10() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.log10())),
+        Value::Int(i) => Ok(Value::Float((i as f64).log10())),
+        _ => Err("math_log10() requires a number".to_string()),
+    };
+}
+"math_exp" => {
+    if args.len() != 1 {
+        return Err("math_exp() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Float(f.exp())),
+        Value::Int(i) => Ok(Value::Float((i as f64).exp())),
+        _ => Err("math_exp() requires a number".to_string()),
+    };
+}
+"math_inf" => {
+    if args.len() != 0 {
+        return Err("math_inf() takes no arguments".to_string());
+    }
+    return Ok(Value::Float(f64::INFINITY));
+}
+"math_is_nan" => {
+    if args.len() != 1 {
+        return Err("math_is_nan() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Bool(f.is_nan())),
+        Value::Int(_) => Ok(Value::Bool(false)),
+        _ => Err("math_is_nan() requires a number".to_string()),
+    };
+}
+"math_is_inf" => {
+    if args.len() != 1 {
+        return Err("math_is_inf() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Float(f) => Ok(Value::Bool(f.is_infinite())),
+        Value::Int(_) => Ok(Value::Bool(false)),
+        _ => Err("math_is_inf() requires a number".to_string()),
+    };
+}
+
+// Statistics Functions
+"stats_mean" => {
+    if args.len() != 1 {
+        return Err("stats_mean() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_mean() requires a non-empty array".to_string());
+            }
+            let mut sum = 0.0;
+            for v in &a {
+                match v {
+                    Value::Float(f) => sum += f,
+                    Value::Int(i) => sum += *i as f64,
+                    _ => return Err("stats_mean() requires numeric array".to_string()),
+                }
+            }
+            Ok(Value::Float(sum / a.len() as f64))
+        }
+        _ => Err("stats_mean() requires an array".to_string()),
+    };
+}
+"stats_median" => {
+    if args.len() != 1 {
+        return Err("stats_median() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_median() requires a non-empty array".to_string());
+            }
+            let mut nums: Vec<f64> = Vec::new();
+            for v in a {
+                match v {
+                    Value::Float(f) => nums.push(f),
+                    Value::Int(i) => nums.push(i as f64),
+                    _ => return Err("stats_median() requires numeric array".to_string()),
+                }
+            }
+            nums.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let mid = nums.len() / 2;
+            if nums.len() % 2 == 1 {
+                Ok(Value::Float(nums[mid]))
+            } else {
+                Ok(Value::Float((nums[mid - 1] + nums[mid]) / 2.0))
+            }
+        }
+        _ => Err("stats_median() requires an array".to_string()),
+    };
+}
+"stats_min" => {
+    if args.len() != 1 {
+        return Err("stats_min() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_min() requires a non-empty array".to_string());
+            }
+            let mut min = f64::INFINITY;
+            for v in a {
+                let num = match v {
+                    Value::Float(f) => f,
+                    Value::Int(i) => i as f64,
+                    _ => return Err("stats_min() requires numeric array".to_string()),
+                };
+                if num < min {
+                    min = num;
+                }
+            }
+            if min.fract() == 0.0 && !min.is_infinite() {
+                Ok(Value::Int(min as i64))
+            } else {
+                Ok(Value::Float(min))
+            }
+        }
+        _ => Err("stats_min() requires an array".to_string()),
+    };
+}
+"stats_max" => {
+    if args.len() != 1 {
+        return Err("stats_max() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_max() requires a non-empty array".to_string());
+            }
+            let mut max = f64::NEG_INFINITY;
+            for v in a {
+                let num = match v {
+                    Value::Float(f) => f,
+                    Value::Int(i) => i as f64,
+                    _ => return Err("stats_max() requires numeric array".to_string()),
+                };
+                if num > max {
+                    max = num;
+                }
+            }
+            if max.fract() == 0.0 && !max.is_infinite() {
+                Ok(Value::Int(max as i64))
+            } else {
+                Ok(Value::Float(max))
+            }
+        }
+        _ => Err("stats_max() requires an array".to_string()),
+    };
+}
+"stats_sum" => {
+    if args.len() != 1 {
+        return Err("stats_sum() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            let mut sum = 0.0;
+            for v in a {
+                match v {
+                    Value::Float(f) => sum += f,
+                    Value::Int(i) => sum += i as f64,
+                    _ => return Err("stats_sum() requires numeric array".to_string()),
+                }
+            }
+            if sum.fract() == 0.0 {
+                Ok(Value::Int(sum as i64))
+            } else {
+                Ok(Value::Float(sum))
+            }
+        }
+        _ => Err("stats_sum() requires an array".to_string()),
+    };
+}
+"stats_variance" => {
+    if args.len() != 1 {
+        return Err("stats_variance() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_variance() requires a non-empty array".to_string());
+            }
+            let mut nums: Vec<f64> = Vec::new();
+            for v in &a {
+                match v {
+                    Value::Float(f) => nums.push(*f),
+                    Value::Int(i) => nums.push(*i as f64),
+                    _ => return Err("stats_variance() requires numeric array".to_string()),
+                }
+            }
+            let mean: f64 = nums.iter().sum::<f64>() / nums.len() as f64;
+            let variance: f64 = nums.iter()
+                .map(|x| (x - mean).powi(2))
+                .sum::<f64>() / nums.len() as f64;
+            Ok(Value::Float(variance))
+        }
+        _ => Err("stats_variance() requires an array".to_string()),
+    };
+}
+"stats_stddev" => {
+    if args.len() != 1 {
+        return Err("stats_stddev() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_stddev() requires a non-empty array".to_string());
+            }
+            let mut nums: Vec<f64> = Vec::new();
+            for v in &a {
+                match v {
+                    Value::Float(f) => nums.push(*f),
+                    Value::Int(i) => nums.push(*i as f64),
+                    _ => return Err("stats_stddev() requires numeric array".to_string()),
+                }
+            }
+            let mean: f64 = nums.iter().sum::<f64>() / nums.len() as f64;
+            let variance: f64 = nums.iter()
+                .map(|x| (x - mean).powi(2))
+                .sum::<f64>() / nums.len() as f64;
+            Ok(Value::Float(variance.sqrt()))
+        }
+        _ => Err("stats_stddev() requires an array".to_string()),
+    };
+}
+"stats_range" => {
+    if args.len() != 1 {
+        return Err("stats_range() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(a) => {
+            if a.is_empty() {
+                return Err("stats_range() requires a non-empty array".to_string());
+            }
+            let mut min = f64::INFINITY;
+            let mut max = f64::NEG_INFINITY;
+            for v in a {
+                let num = match v {
+                    Value::Float(f) => f,
+                    Value::Int(i) => i as f64,
+                    _ => return Err("stats_range() requires numeric array".to_string()),
+                };
+                if num < min {
+                    min = num;
+                }
+                if num > max {
+                    max = num;
+                }
+            }
+            let range = max - min;
+            if range.fract() == 0.0 {
+                Ok(Value::Int(range as i64))
+            } else {
+                Ok(Value::Float(range))
+            }
+        }
+        _ => Err("stats_range() requires an array".to_string()),
+    };
+}
+
+// Linear Algebra Functions
+"vec_add" => {
+    if args.len() != 2 {
+        return Err("vec_add() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Array(va), Value::Array(vb)) => {
+            if va.len() != vb.len() {
+                return Err("vec_add() requires arrays of same length".to_string());
+            }
+            let mut result = Vec::new();
+            for (av, bv) in va.iter().zip(vb.iter()) {
+                let sum = match (av, bv) {
+                    (Value::Float(af), Value::Float(bf)) => Value::Float(af + bf),
+                    (Value::Float(af), Value::Int(bi)) => Value::Float(af + *bi as f64),
+                    (Value::Int(ai), Value::Float(bf)) => Value::Float(*ai as f64 + bf),
+                    (Value::Int(ai), Value::Int(bi)) => Value::Int(ai + bi),
+                    _ => return Err("vec_add() requires numeric arrays".to_string()),
+                };
+                result.push(sum);
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err("vec_add() requires arrays".to_string()),
+    };
+}
+"vec_sub" => {
+    if args.len() != 2 {
+        return Err("vec_sub() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Array(va), Value::Array(vb)) => {
+            if va.len() != vb.len() {
+                return Err("vec_sub() requires arrays of same length".to_string());
+            }
+            let mut result = Vec::new();
+            for (av, bv) in va.iter().zip(vb.iter()) {
+                let diff = match (av, bv) {
+                    (Value::Float(af), Value::Float(bf)) => Value::Float(af - bf),
+                    (Value::Float(af), Value::Int(bi)) => Value::Float(af - *bi as f64),
+                    (Value::Int(ai), Value::Float(bf)) => Value::Float(*ai as f64 - bf),
+                    (Value::Int(ai), Value::Int(bi)) => Value::Int(ai - bi),
+                    _ => return Err("vec_sub() requires numeric arrays".to_string()),
+                };
+                result.push(diff);
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err("vec_sub() requires arrays".to_string()),
+    };
+}
+"vec_mul" => {
+    if args.len() != 2 {
+        return Err("vec_mul() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Array(va), Value::Array(vb)) => {
+            if va.len() != vb.len() {
+                return Err("vec_mul() requires arrays of same length".to_string());
+            }
+            let mut result = Vec::new();
+            for (av, bv) in va.iter().zip(vb.iter()) {
+                let prod = match (av, bv) {
+                    (Value::Float(af), Value::Float(bf)) => Value::Float(af * bf),
+                    (Value::Float(af), Value::Int(bi)) => Value::Float(af * *bi as f64),
+                    (Value::Int(ai), Value::Float(bf)) => Value::Float(*ai as f64 * bf),
+                    (Value::Int(ai), Value::Int(bi)) => Value::Int(ai * bi),
+                    _ => return Err("vec_mul() requires numeric arrays".to_string()),
+                };
+                result.push(prod);
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err("vec_mul() requires arrays".to_string()),
+    };
+}
+"vec_dot" => {
+    if args.len() != 2 {
+        return Err("vec_dot() takes 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Array(va), Value::Array(vb)) => {
+            if va.len() != vb.len() {
+                return Err("vec_dot() requires arrays of same length".to_string());
+            }
+            let mut sum = 0.0;
+            for (av, bv) in va.iter().zip(vb.iter()) {
+                let prod = match (av, bv) {
+                    (Value::Float(af), Value::Float(bf)) => af * bf,
+                    (Value::Float(af), Value::Int(bi)) => af * *bi as f64,
+                    (Value::Int(ai), Value::Float(bf)) => *ai as f64 * bf,
+                    (Value::Int(ai), Value::Int(bi)) => *ai as f64 * *bi as f64,
+                    _ => return Err("vec_dot() requires numeric arrays".to_string()),
+                };
+                sum += prod;
+            }
+            if sum.fract() == 0.0 {
+                Ok(Value::Int(sum as i64))
+            } else {
+                Ok(Value::Float(sum))
+            }
+        }
+        _ => Err("vec_dot() requires arrays".to_string()),
+    };
+}
+"vec_scale" => {
+    if args.len() != 2 {
+        return Err("vec_scale() takes 2 arguments".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    let scalar = self.eval_expression(&args[1])?;
+    return match (arr, scalar) {
+        (Value::Array(va), s) => {
+            let scale_f = match s {
+                Value::Float(f) => f,
+                Value::Int(i) => i as f64,
+                _ => return Err("vec_scale() requires a number as scalar".to_string()),
+            };
+            let mut result = Vec::new();
+            for v in va {
+                let prod = match v {
+                    Value::Float(f) => Value::Float(f * scale_f),
+                    Value::Int(i) => Value::Float(i as f64 * scale_f),
+                    _ => return Err("vec_scale() requires numeric array".to_string()),
+                };
+                result.push(prod);
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err("vec_scale() requires an array and a number".to_string()),
+    };
+}
+"vec_norm" => {
+    if args.len() != 1 {
+        return Err("vec_norm() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(va) => {
+            let mut sum_sq = 0.0;
+            for v in &va {
+                let num = match v {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => return Err("vec_norm() requires numeric array".to_string()),
+                };
+                sum_sq += num * num;
+            }
+            Ok(Value::Float(sum_sq.sqrt()))
+        }
+        _ => Err("vec_norm() requires an array".to_string()),
+    };
+}
+"vec_normalize" => {
+    if args.len() != 1 {
+        return Err("vec_normalize() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(va) => {
+            let mut sum_sq = 0.0;
+            for v in &va {
+                let num = match v {
+                    Value::Float(f) => *f,
+                    Value::Int(i) => *i as f64,
+                    _ => return Err("vec_normalize() requires numeric array".to_string()),
+                };
+                sum_sq += num * num;
+            }
+            let norm = sum_sq.sqrt();
+            if norm == 0.0 {
+                return Err("vec_normalize() cannot normalize zero vector".to_string());
+            }
+            let mut result = Vec::new();
+            for v in va {
+                let normalized = match v {
+                    Value::Float(f) => Value::Float(f / norm),
+                    Value::Int(i) => Value::Float(i as f64 / norm),
+                    _ => return Err("vec_normalize() requires numeric array".to_string()),
+                };
+                result.push(normalized);
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err("vec_normalize() requires an array".to_string()),
+    };
+}
+"linspace" => {
+    if args.len() != 3 {
+        return Err("linspace() takes 3 arguments (start, end, n)".to_string());
+    }
+    let start = self.eval_expression(&args[0])?;
+    let end = self.eval_expression(&args[1])?;
+    let n = self.eval_expression(&args[2])?;
+    
+    let start_f = match start {
+        Value::Float(f) => f,
+        Value::Int(i) => i as f64,
+        _ => return Err("linspace() requires numbers for start and end".to_string()),
+    };
+    let end_f = match end {
+        Value::Float(f) => f,
+        Value::Int(i) => i as f64,
+        _ => return Err("linspace() requires numbers for start and end".to_string()),
+    };
+    let n_count = match n {
+        Value::Int(i) => i as usize,
+        _ => return Err("linspace() requires an integer count".to_string()),
+    };
+    
+    if n_count == 0 {
+        return Err("linspace() requires n > 0".to_string());
+    }
+    if n_count == 1 {
+        return Ok(Value::Array(vec![Value::Float(start_f)]));
+    }
+    let step = (end_f - start_f) / (n_count - 1) as f64;
+    let mut result = Vec::new();
+    for i in 0..n_count {
+        result.push(Value::Float(start_f + step * i as f64));
+    }
+    return Ok(Value::Array(result));
+}
+"arange" => {
+    if args.len() != 3 {
+        return Err("arange() takes 3 arguments (start, end, step)".to_string());
+    }
+    let start = self.eval_expression(&args[0])?;
+    let end = self.eval_expression(&args[1])?;
+    let step = self.eval_expression(&args[2])?;
+    
+    let start_f = match start {
+        Value::Float(f) => f,
+        Value::Int(i) => i as f64,
+        _ => return Err("arange() requires numbers".to_string()),
+    };
+    let end_f = match end {
+        Value::Float(f) => f,
+        Value::Int(i) => i as f64,
+        _ => return Err("arange() requires numbers".to_string()),
+    };
+    let step_f = match step {
+        Value::Float(f) => f,
+        Value::Int(i) => i as f64,
+        _ => return Err("arange() requires numbers".to_string()),
+    };
+    
+    if step_f == 0.0 {
+        return Err("arange() step cannot be zero".to_string());
+    }
+    let mut result = Vec::new();
+    if step_f > 0.0 {
+        let mut current = start_f;
+        while current < end_f {
+            result.push(Value::Float(current));
+            current += step_f;
+        }
+    } else {
+        let mut current = start_f;
+        while current > end_f {
+            result.push(Value::Float(current));
+            current += step_f;
+        }
+    }
+    return Ok(Value::Array(result));
+}
                         _ => {}
                     }
                 }
@@ -5369,4 +5980,297 @@ mod tests {
     }
 
 
+
+    // ============ PHASE 35: AI/ML & Scientific Computing Tests ============
+
+    #[test]
+    fn test_math_pi() {
+        let (result, output) = run_vryn(r#"
+            let pi = math_pi()
+            println(pi)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].starts_with("3.14159"));
+    }
+
+    #[test]
+    fn test_math_e() {
+        let (result, output) = run_vryn(r#"
+            let e = math_e()
+            println(e)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].starts_with("2.71828"));
+    }
+
+    #[test]
+    fn test_math_sin() {
+        let (result, output) = run_vryn(r#"
+            let s = math_sin(0)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_math_cos() {
+        let (result, output) = run_vryn(r#"
+            let c = math_cos(0)
+            println(c)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+    }
+
+    #[test]
+    fn test_math_exp() {
+        let (result, output) = run_vryn(r#"
+            let e = math_exp(1)
+            println(e)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].starts_with("2.71828"));
+    }
+
+    #[test]
+    fn test_math_log() {
+        let (result, output) = run_vryn(r#"
+            let l = math_log(1.0)
+            println(l)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_math_inf() {
+        let (result, output) = run_vryn(r#"
+            let inf = math_inf()
+            let is_inf = math_is_inf(inf)
+            println(is_inf)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_stats_sum() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            let s = stats_sum(arr)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "15");
+    }
+
+    #[test]
+    fn test_stats_mean() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            let m = stats_mean(arr)
+            println(m)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+    }
+
+    #[test]
+    fn test_stats_min() {
+        let (result, output) = run_vryn(r#"
+            let arr = [5, 2, 8, 1, 9]
+            let m = stats_min(arr)
+            println(m)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+    }
+
+    #[test]
+    fn test_stats_max() {
+        let (result, output) = run_vryn(r#"
+            let arr = [5, 2, 8, 1, 9]
+            let m = stats_max(arr)
+            println(m)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "9");
+    }
+
+    #[test]
+    fn test_stats_range() {
+        let (result, output) = run_vryn(r#"
+            let arr = [5, 2, 8, 1, 9]
+            let r = stats_range(arr)
+            println(r)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "8");
+    }
+
+    #[test]
+    fn test_vec_add() {
+        let (result, output) = run_vryn(r#"
+            let a = [1, 2, 3]
+            let b = [4, 5, 6]
+            let c = vec_add(a, b)
+            println(c)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[5, 7, 9]");
+    }
+
+    #[test]
+    fn test_vec_scale() {
+        let (result, output) = run_vryn(r#"
+            let a = [1, 2, 3]
+            let s = vec_scale(a, 2)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[2, 4, 6]");
+    }
+
+    #[test]
+    fn test_vec_dot() {
+        let (result, output) = run_vryn(r#"
+            let a = [1, 2, 3]
+            let b = [4, 5, 6]
+            let d = vec_dot(a, b)
+            println(d)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "32");
+    }
+
+    #[test]
+    fn test_vec_norm() {
+        let (result, output) = run_vryn(r#"
+            let a = [3, 4]
+            let n = vec_norm(a)
+            println(n)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+    }
+
+    #[test]
+    fn test_linspace() {
+        let (result, output) = run_vryn(r#"
+            let arr = linspace(0, 10, 3)
+            println(arr)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("0") && output[0].contains("10"));
+    }
+
+    #[test]
+    fn test_arange() {
+        let (result, output) = run_vryn(r#"
+            let arr = arange(0, 5, 1)
+            println(arr)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("0") && output[0].contains("4"));
+    }
+
+    #[test]
+    fn test_math_tan() {
+        let (result, output) = run_vryn(r#"
+            let t = math_tan(0)
+            println(t)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_stats_median() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 3, 5, 2, 4]
+            let m = stats_median(arr)
+            println(m)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+    }
+
+    #[test]
+    fn test_vec_sub() {
+        let (result, output) = run_vryn(r#"
+            let a = [5, 6, 7]
+            let b = [1, 2, 3]
+            let c = vec_sub(a, b)
+            println(c)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[4, 4, 4]");
+    }
+
+    #[test]
+    fn test_vec_mul() {
+        let (result, output) = run_vryn(r#"
+            let a = [2, 3, 4]
+            let b = [5, 6, 7]
+            let c = vec_mul(a, b)
+            println(c)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[10, 18, 28]");
+    }
+
+    #[test]
+    fn test_math_log10() {
+        let (result, output) = run_vryn(r#"
+            let l = math_log10(100.0)
+            println(l)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+    }
+
+    #[test]
+    fn test_math_is_nan() {
+        let (result, output) = run_vryn(r#"
+            let nan = math_inf() - math_inf()
+            let is_nan = math_is_nan(nan)
+            println(is_nan)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_stats_variance() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            let v = stats_variance(arr)
+            println(v)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].starts_with("2"));
+    }
+
+    #[test]
+    fn test_stats_stddev() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            let s = stats_stddev(arr)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].starts_with("1"));
+    }
+
+    #[test]
+    fn test_vec_normalize() {
+        let (result, output) = run_vryn(r#"
+            let a = [3, 4]
+            let n = vec_normalize(a)
+            println(n)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("0.6") && output[0].contains("0.8"));
+    }
 }
