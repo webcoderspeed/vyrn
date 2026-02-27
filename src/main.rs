@@ -2,6 +2,7 @@ mod lexer;
 mod parser;
 mod codegen;
 mod typechecker;
+mod formatter;
 
 use std::env;
 use std::fs;
@@ -11,6 +12,7 @@ use lexer::Lexer;
 use parser::Parser;
 use codegen::Interpreter;
 use typechecker::TypeChecker;
+use formatter::Formatter;
 
 const VERSION: &str = "0.1.0-alpha";
 
@@ -57,6 +59,28 @@ fn main() {
             }
             show_ast(&args[2]);
         }
+        "new" => {
+            if args.len() < 3 {
+                eprintln!("\x1b[31merror:\x1b[0m No project name specified");
+                eprintln!("Usage: vryn new <name>");
+                std::process::exit(1);
+            }
+            new_project(&args[2]);
+        }
+        "init" => {
+            init_project();
+        }
+        "test" => {
+            let file = if args.len() > 2 { Some(args[2].as_str()) } else { None };
+            test_file(file);
+        }
+        "fmt" => {
+            if args.len() < 3 {
+                eprintln!("Usage: vryn format <file.vn>");
+                std::process::exit(1);
+            }
+            format_file(&args[2]);
+        }
         other => {
             if other.ends_with(".vn") {
                 run_file(other);
@@ -79,6 +103,10 @@ fn print_usage() {
 
   COMMANDS:
     run <file.vn>     Compile and run a Vryn program
+    new <name>        Create a new Vryn project
+    init              Initialize a Vryn project in current directory
+    test [file.vn]    Run test functions (test_*)
+    fmt <file.vn>     Format code with 4-space indentation
     repl              Start interactive REPL
     check <file.vn>   Type-check without running
     version           Show version info
@@ -298,3 +326,202 @@ fn show_ast(path: &str) {
         Err(e) => eprintln!("Parser error: {}", e),
     }
 }
+
+fn format_file(path: &str) {
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Cannot read '{}': {}", path, e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut lexer = Lexer::new(&source);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Lexer error: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    match parser.parse() {
+        Ok(program) => {
+            let mut formatter = Formatter::new();
+            let formatted = formatter.format_program(&program);
+            println!("{}", formatted);
+        }
+        Err(e) => eprintln!("Parser error: {}", e),
+    }
+}
+
+fn new_project(name: &str) {
+    // Create <name>/ directory
+    if let Err(e) = fs::create_dir(name) {
+        eprintln!("\x1b[31merror:\x1b[0m Cannot create directory '{}': {}", name, e);
+        std::process::exit(1);
+    }
+
+    // Create <name>/src/ directory
+    let src_dir = format!("{}/src", name);
+    if let Err(e) = fs::create_dir(&src_dir) {
+        eprintln!("\x1b[31merror:\x1b[0m Cannot create directory '{}': {}", src_dir, e);
+        std::process::exit(1);
+    }
+
+    // Create <name>/src/main.vn with hello world template
+    let main_vn_content = r#"fn main() {
+    println("Hello, World!")
+}
+"#;
+    let main_vn_path = format!("{}/main.vn", src_dir);
+    if let Err(e) = fs::write(&main_vn_path, main_vn_content) {
+        eprintln!("\x1b[31merror:\x1b[0m Cannot write file '{}': {}", main_vn_path, e);
+        std::process::exit(1);
+    }
+
+    // Create <name>/vryn.toml with project metadata
+    let toml_content = format!(r#"[package]
+name = "{}"
+version = "0.1.0"
+edition = "2024"
+"#, name);
+    let toml_path = format!("{}/vryn.toml", name);
+    if let Err(e) = fs::write(&toml_path, toml_content) {
+        eprintln!("\x1b[31merror:\x1b[0m Cannot write file '{}': {}", toml_path, e);
+        std::process::exit(1);
+    }
+
+    println!("\x1b[32m✓\x1b[0m Created new Vryn project '{}'", name);
+    println!("  Run with: vryn run {}/src/main.vn", name);
+}
+
+fn init_project() {
+    // Create src/ directory if not exists
+    if !std::path::Path::new("src").exists() {
+        if let Err(e) = fs::create_dir("src") {
+            eprintln!("\x1b[31merror:\x1b[0m Cannot create directory 'src': {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Create src/main.vn if not exists
+    let main_vn = "src/main.vn";
+    if !std::path::Path::new(main_vn).exists() {
+        let main_content = r#"fn main() {
+    println("Hello, World!")
+}
+"#;
+        if let Err(e) = fs::write(main_vn, main_content) {
+            eprintln!("\x1b[31merror:\x1b[0m Cannot write file '{}': {}", main_vn, e);
+            std::process::exit(1);
+        }
+        println!("\x1b[32m✓\x1b[0m Created {}", main_vn);
+    }
+
+    // Create vryn.toml if not exists
+    let toml_file = "vryn.toml";
+    if !std::path::Path::new(toml_file).exists() {
+        let toml_content = r#"[package]
+name = "myproject"
+version = "0.1.0"
+edition = "2024"
+"#;
+        if let Err(e) = fs::write(toml_file, toml_content) {
+            eprintln!("\x1b[31merror:\x1b[0m Cannot write file '{}': {}", toml_file, e);
+            std::process::exit(1);
+        }
+        println!("\x1b[32m✓\x1b[0m Created {}", toml_file);
+    } else {
+        println!("\x1b[32m✓\x1b[0m {} already exists", toml_file);
+    }
+
+    println!("\x1b[32m✓\x1b[0m Project initialized!");
+}
+
+fn test_file(path: Option<&str>) {
+    let files_to_test = if let Some(p) = path {
+        vec![p.to_string()]
+    } else {
+        // Find all .vn files in src/
+        let mut files = Vec::new();
+        if let Ok(entries) = fs::read_dir("src") {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("vn") {
+                    if let Some(path_str) = path.to_str() {
+                        files.push(path_str.to_string());
+                    }
+                }
+            }
+        }
+        files
+    };
+
+    let mut passed = 0;
+    let mut failed = 0;
+
+    for file_path in files_to_test {
+        let source = match fs::read_to_string(&file_path) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("\x1b[31merror:\x1b[0m Cannot read file '{}': {}", file_path, e);
+                std::process::exit(1);
+            }
+        };
+
+        let mut lexer = Lexer::new(&source);
+        let tokens = match lexer.tokenize() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("\x1b[31merror[Lexer]:\x1b[0m {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        let mut parser = Parser::new(tokens);
+        let program = match parser.parse() {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("\x1b[31merror[Parser]:\x1b[0m {}", e);
+                std::process::exit(1);
+            }
+        };
+
+        // Find test functions (ones starting with test_)
+        for stmt in &program.statements {
+            if let parser::ast::Statement::Function { name, params: _, body, .. } = stmt {
+                if name.starts_with("test_") {
+                    let mut interpreter = Interpreter::new();
+                    
+                    // Execute the test function
+                    let test_program = parser::ast::Program {
+                        statements: body.clone(),
+                    };
+                    
+                    match interpreter.run(&test_program) {
+                        Ok(_) => {
+                            println!("\x1b[32m✓\x1b[0m {}", name);
+                            passed += 1;
+                        }
+                        Err(e) => {
+                            println!("\x1b[31m✗\x1b[0m {} — {}", name, e);
+                            failed += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let total = passed + failed;
+    println!();
+    if failed == 0 {
+        println!("\x1b[32mAll {} tests passed!\x1b[0m", total);
+    } else {
+        println!("\x1b[31m{} passed, {} failed out of {} tests\x1b[0m", passed, failed, total);
+        std::process::exit(1);
+    }
+}
+

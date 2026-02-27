@@ -1134,6 +1134,57 @@ impl Interpreter {
     };
 }
 
+
+"assert" => {
+    if args.len() != 1 {
+        return Err("assert() takes exactly 1 argument".to_string());
+    }
+    let condition = self.eval_expression(&args[0])?;
+    return match condition {
+        Value::Bool(true) => Ok(Value::None),
+        Value::Bool(false) => Err("Assertion failed".to_string()),
+        _ => Err("assert() requires a boolean argument".to_string()),
+    };
+}
+"assert_eq" => {
+    if args.len() != 2 {
+        return Err("assert_eq() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    let values_equal = match (&a, &b) {
+        (Value::Int(x), Value::Int(y)) => x == y,
+        (Value::Float(x), Value::Float(y)) => (x - y).abs() < f64::EPSILON,
+        (Value::Str(x), Value::Str(y)) => x == y,
+        (Value::Bool(x), Value::Bool(y)) => x == y,
+        _ => false,
+    };
+    return if values_equal {
+        Ok(Value::None)
+    } else {
+        Err(format!("Assertion failed: {} != {}", a, b))
+    };
+}
+"assert_ne" => {
+    if args.len() != 2 {
+        return Err("assert_ne() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    let values_equal = match (&a, &b) {
+        (Value::Int(x), Value::Int(y)) => x == y,
+        (Value::Float(x), Value::Float(y)) => (x - y).abs() < f64::EPSILON,
+        (Value::Str(x), Value::Str(y)) => x == y,
+        (Value::Bool(x), Value::Bool(y)) => x == y,
+        _ => false,
+    };
+    return if !values_equal {
+        Ok(Value::None)
+    } else {
+        Err(format!("Assertion failed: {} == {}", a, b))
+    };
+}
+
                         _ => {}
                     }
                 }
@@ -3702,6 +3753,58 @@ mod tests {
         "#);
         assert!(result.is_ok());
         assert_eq!(output[0], "task_handle");
+    }
+
+
+    #[test]
+    fn test_assert_true() {
+        let (result, _) = run_vryn(r#"assert(true)"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_assert_false() {
+        let (result, _) = run_vryn(r#"assert(false)"#);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Assertion failed");
+    }
+
+    #[test]
+    fn test_assert_eq_pass() {
+        let (result, _) = run_vryn(r#"assert_eq(5, 5)"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_assert_eq_fail() {
+        let (result, _) = run_vryn(r#"assert_eq(5, 3)"#);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Assertion failed: 5 != 3"));
+    }
+
+    #[test]
+    fn test_assert_ne_pass() {
+        let (result, _) = run_vryn(r#"assert_ne(5, 3)"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_assert_ne_fail() {
+        let (result, _) = run_vryn(r#"assert_ne(5, 5)"#);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Assertion failed: 5 == 5"));
+    }
+
+    #[test]
+    fn test_assert_eq_strings() {
+        let (result, _) = run_vryn(r#"assert_eq("hello", "hello")"#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_assert_eq_strings_fail() {
+        let (result, _) = run_vryn(r#"assert_eq("hello", "world")"#);
+        assert!(result.is_err());
     }
 
 }
