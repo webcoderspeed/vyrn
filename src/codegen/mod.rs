@@ -2407,6 +2407,369 @@ impl Interpreter {
     }
     return Ok(Value::Array(result));
 }
+
+// ===== Phase 31: Database & Data Functions =====
+
+"csv_parse" => {
+    if args.len() != 1 { return Err("csv_parse() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? {
+        Value::Str(s) => s,
+        _ => return Err("csv_parse() expects a string".to_string()),
+    };
+    let mut rows = Vec::new();
+    for line in s.lines() {
+        let mut cols = Vec::new();
+        let mut current = String::new();
+        let mut in_quotes = false;
+        for ch in line.chars() {
+            if ch == '"' {
+                in_quotes = !in_quotes;
+            } else if ch == ',' && !in_quotes {
+                cols.push(Value::Str(current.clone()));
+                current.clear();
+            } else {
+                current.push(ch);
+            }
+        }
+        cols.push(Value::Str(current));
+        rows.push(Value::Array(cols));
+    }
+    return Ok(Value::Array(rows));
+}
+
+"csv_stringify" => {
+    if args.len() != 1 { return Err("csv_stringify() takes 1 argument".to_string()); }
+    let arr = match self.eval_expression(&args[0])? {
+        Value::Array(a) => a,
+        _ => return Err("csv_stringify() expects an array".to_string()),
+    };
+    let mut lines = Vec::new();
+    for row in &arr {
+        if let Value::Array(cols) = row {
+            let fields: Vec<String> = cols.iter().map(|v| match v {
+                Value::Str(s) => {
+                    if s.contains(',') || s.contains('"') || s.contains('\n') {
+                        format!("\"{}\"", s.replace('"', "\"\""))
+                    } else { s.clone() }
+                }
+                other => format!("{}", other),
+            }).collect();
+            lines.push(fields.join(","));
+        }
+    }
+    return Ok(Value::Str(lines.join("\n")));
+}
+
+"kv_new" => {
+    return Ok(Value::Struct {
+        name: "_KVStore".to_string(),
+        fields: std::collections::HashMap::new(),
+    });
+}
+
+"kv_set" => {
+    if args.len() != 3 { return Err("kv_set() takes 3 arguments".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    let key = match self.eval_expression(&args[1])? {
+        Value::Str(s) => s,
+        _ => return Err("kv_set() key must be a string".to_string()),
+    };
+    let val = self.eval_expression(&args[2])?;
+    if let Value::Struct { name, mut fields } = store {
+        fields.insert(key, val);
+        return Ok(Value::Struct { name, fields });
+    }
+    return Err("kv_set() expects a kv store".to_string());
+}
+
+"kv_get" => {
+    if args.len() != 2 { return Err("kv_get() takes 2 arguments".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    let key = match self.eval_expression(&args[1])? {
+        Value::Str(s) => s,
+        _ => return Err("kv_get() key must be a string".to_string()),
+    };
+    if let Value::Struct { fields, .. } = store {
+        return Ok(fields.get(&key).cloned().unwrap_or(Value::None));
+    }
+    return Err("kv_get() expects a kv store".to_string());
+}
+
+"kv_del" => {
+    if args.len() != 2 { return Err("kv_del() takes 2 arguments".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    let key = match self.eval_expression(&args[1])? {
+        Value::Str(s) => s,
+        _ => return Err("kv_del() key must be a string".to_string()),
+    };
+    if let Value::Struct { name, mut fields } = store {
+        fields.remove(&key);
+        return Ok(Value::Struct { name, fields });
+    }
+    return Err("kv_del() expects a kv store".to_string());
+}
+
+"kv_keys" => {
+    if args.len() != 1 { return Err("kv_keys() takes 1 argument".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    if let Value::Struct { fields, .. } = store {
+        let mut keys: Vec<String> = fields.keys().cloned().collect();
+        keys.sort();
+        return Ok(Value::Array(keys.into_iter().map(Value::Str).collect()));
+    }
+    return Err("kv_keys() expects a kv store".to_string());
+}
+
+"kv_values" => {
+    if args.len() != 1 { return Err("kv_values() takes 1 argument".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    if let Value::Struct { fields, .. } = store {
+        let mut pairs: Vec<(String, Value)> = fields.into_iter().collect();
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        return Ok(Value::Array(pairs.into_iter().map(|(_, v)| v).collect()));
+    }
+    return Err("kv_values() expects a kv store".to_string());
+}
+
+"kv_len" => {
+    if args.len() != 1 { return Err("kv_len() takes 1 argument".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    if let Value::Struct { fields, .. } = store {
+        return Ok(Value::Int(fields.len() as i64));
+    }
+    return Err("kv_len() expects a kv store".to_string());
+}
+
+"kv_has" => {
+    if args.len() != 2 { return Err("kv_has() takes 2 arguments".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    let key = match self.eval_expression(&args[1])? {
+        Value::Str(s) => s,
+        _ => return Err("kv_has() key must be a string".to_string()),
+    };
+    if let Value::Struct { fields, .. } = store {
+        return Ok(Value::Bool(fields.contains_key(&key)));
+    }
+    return Err("kv_has() expects a kv store".to_string());
+}
+
+"kv_clear" => {
+    if args.len() != 1 { return Err("kv_clear() takes 1 argument".to_string()); }
+    let store = self.eval_expression(&args[0])?;
+    if let Value::Struct { name, .. } = store {
+        return Ok(Value::Struct { name, fields: std::collections::HashMap::new() });
+    }
+    return Err("kv_clear() expects a kv store".to_string());
+}
+
+"serialize" => {
+    if args.len() != 1 { return Err("serialize() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    let s = match &val {
+        Value::Int(n) => format!("i:{}", n),
+        Value::Float(f) => format!("f:{}", f),
+        Value::Str(s) => format!("s:{}", s),
+        Value::Bool(b) => format!("b:{}", b),
+        Value::None => "n:".to_string(),
+        Value::Array(arr) => {
+            let parts: Vec<String> = arr.iter().map(|v| match v {
+                Value::Int(n) => format!("i:{}", n),
+                Value::Float(f) => format!("f:{}", f),
+                Value::Str(s) => format!("s:{}", s),
+                Value::Bool(b) => format!("b:{}", b),
+                _ => "n:".to_string(),
+            }).collect();
+            format!("a:{}", parts.join("|"))
+        }
+        _ => format!("s:{}", val),
+    };
+    return Ok(Value::Str(s));
+}
+
+"deserialize" => {
+    if args.len() != 1 { return Err("deserialize() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? {
+        Value::Str(s) => s,
+        _ => return Err("deserialize() expects a string".to_string()),
+    };
+    if let Some(rest) = s.strip_prefix("i:") {
+        return Ok(Value::Int(rest.parse::<i64>().map_err(|e| e.to_string())?));
+    } else if let Some(rest) = s.strip_prefix("f:") {
+        return Ok(Value::Float(rest.parse::<f64>().map_err(|e| e.to_string())?));
+    } else if let Some(rest) = s.strip_prefix("s:") {
+        return Ok(Value::Str(rest.to_string()));
+    } else if let Some(rest) = s.strip_prefix("b:") {
+        return Ok(Value::Bool(rest == "true"));
+    } else if s == "n:" {
+        return Ok(Value::None);
+    } else if let Some(rest) = s.strip_prefix("a:") {
+        let items: Vec<Value> = rest.split('|').map(|item| {
+            if let Some(r) = item.strip_prefix("i:") {
+                Value::Int(r.parse::<i64>().unwrap_or(0))
+            } else if let Some(r) = item.strip_prefix("f:") {
+                Value::Float(r.parse::<f64>().unwrap_or(0.0))
+            } else if let Some(r) = item.strip_prefix("s:") {
+                Value::Str(r.to_string())
+            } else if let Some(r) = item.strip_prefix("b:") {
+                Value::Bool(r == "true")
+            } else {
+                Value::None
+            }
+        }).collect();
+        return Ok(Value::Array(items));
+    }
+    return Err(format!("Cannot deserialize: {}", s));
+}
+
+// ===== Phase 33: Cross-Compilation & Platform =====
+
+"platform_os" => {
+    let os = if cfg!(target_os = "linux") { "linux" }
+        else if cfg!(target_os = "macos") { "macos" }
+        else if cfg!(target_os = "windows") { "windows" }
+        else { "unknown" };
+    return Ok(Value::Str(os.to_string()));
+}
+
+"platform_arch" => {
+    let arch = if cfg!(target_arch = "x86_64") { "x86_64" }
+        else if cfg!(target_arch = "aarch64") { "aarch64" }
+        else if cfg!(target_arch = "x86") { "x86" }
+        else if cfg!(target_arch = "arm") { "arm" }
+        else { "unknown" };
+    return Ok(Value::Str(arch.to_string()));
+}
+
+"platform_family" => {
+    let family = if cfg!(target_family = "unix") { "unix" }
+        else if cfg!(target_family = "windows") { "windows" }
+        else if cfg!(target_family = "wasm") { "wasm" }
+        else { "unknown" };
+    return Ok(Value::Str(family.to_string()));
+}
+
+"platform_endian" => {
+    let endian = if cfg!(target_endian = "little") { "little" } else { "big" };
+    return Ok(Value::Str(endian.to_string()));
+}
+
+"platform_pointer_size" => {
+    return Ok(Value::Int(std::mem::size_of::<usize>() as i64));
+}
+
+"platform_cores" => {
+    return Ok(Value::Int(1));
+}
+
+"sizeof" => {
+    if args.len() != 1 { return Err("sizeof() takes 1 argument".to_string()); }
+    let type_name = match self.eval_expression(&args[0])? {
+        Value::Str(s) => s,
+        _ => return Err("sizeof() expects a type name string".to_string()),
+    };
+    let size = match type_name.as_str() {
+        "int" => 8,
+        "float" => 8,
+        "bool" => 1,
+        "char" => 1,
+        "str" => std::mem::size_of::<usize>() as i64,
+        _ => return Err(format!("Unknown type for sizeof: {}", type_name)),
+    };
+    return Ok(Value::Int(size));
+}
+
+"bitwise_and" => {
+    if args.len() != 2 { return Err("bitwise_and() takes 2 arguments".to_string()); }
+    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_and() expects integers".to_string()) };
+    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_and() expects integers".to_string()) };
+    return Ok(Value::Int(a & b));
+}
+
+"bitwise_or" => {
+    if args.len() != 2 { return Err("bitwise_or() takes 2 arguments".to_string()); }
+    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_or() expects integers".to_string()) };
+    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_or() expects integers".to_string()) };
+    return Ok(Value::Int(a | b));
+}
+
+"bitwise_xor" => {
+    if args.len() != 2 { return Err("bitwise_xor() takes 2 arguments".to_string()); }
+    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_xor() expects integers".to_string()) };
+    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_xor() expects integers".to_string()) };
+    return Ok(Value::Int(a ^ b));
+}
+
+"bitwise_not" => {
+    if args.len() != 1 { return Err("bitwise_not() takes 1 argument".to_string()); }
+    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_not() expects an integer".to_string()) };
+    return Ok(Value::Int(!a));
+}
+
+"bitwise_shl" => {
+    if args.len() != 2 { return Err("bitwise_shl() takes 2 arguments".to_string()); }
+    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_shl() expects integers".to_string()) };
+    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_shl() expects integers".to_string()) };
+    return Ok(Value::Int(a << b));
+}
+
+"bitwise_shr" => {
+    if args.len() != 2 { return Err("bitwise_shr() takes 2 arguments".to_string()); }
+    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_shr() expects integers".to_string()) };
+    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_shr() expects integers".to_string()) };
+    return Ok(Value::Int(a >> b));
+}
+
+"to_hex" => {
+    if args.len() != 1 { return Err("to_hex() takes 1 argument".to_string()); }
+    let n = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("to_hex() expects an integer".to_string()) };
+    return Ok(Value::Str(format!("{:x}", n)));
+}
+
+"from_hex" => {
+    if args.len() != 1 { return Err("from_hex() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("from_hex() expects a string".to_string()) };
+    let clean = s.strip_prefix("0x").unwrap_or(&s);
+    let val = i64::from_str_radix(clean, 16).map_err(|e| e.to_string())?;
+    return Ok(Value::Int(val));
+}
+
+"to_binary" => {
+    if args.len() != 1 { return Err("to_binary() takes 1 argument".to_string()); }
+    let n = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("to_binary() expects an integer".to_string()) };
+    return Ok(Value::Str(format!("{:b}", n)));
+}
+
+"from_binary" => {
+    if args.len() != 1 { return Err("from_binary() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("from_binary() expects a string".to_string()) };
+    let clean = s.strip_prefix("0b").unwrap_or(&s);
+    let val = i64::from_str_radix(clean, 2).map_err(|e| e.to_string())?;
+    return Ok(Value::Int(val));
+}
+
+"to_octal" => {
+    if args.len() != 1 { return Err("to_octal() takes 1 argument".to_string()); }
+    let n = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("to_octal() expects an integer".to_string()) };
+    return Ok(Value::Str(format!("{:o}", n)));
+}
+
+"byte_array" => {
+    if args.len() != 1 { return Err("byte_array() takes 1 argument".to_string()); }
+    let size = match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => return Err("byte_array() expects an integer".to_string()) };
+    return Ok(Value::Array(vec![Value::Int(0); size]));
+}
+
+"bytes_to_str" => {
+    if args.len() != 1 { return Err("bytes_to_str() takes 1 argument".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("bytes_to_str() expects an array".to_string()) };
+    let bytes: Vec<u8> = arr.iter().map(|v| match v {
+        Value::Int(n) => *n as u8,
+        _ => 0,
+    }).collect();
+    let s = String::from_utf8_lossy(&bytes).to_string();
+    return Ok(Value::Str(s));
+}
+
                         _ => {}
                     }
                 }
@@ -6272,5 +6635,274 @@ mod tests {
         "#);
         assert!(result.is_ok());
         assert!(output[0].contains("0.6") && output[0].contains("0.8"));
+    }
+
+    // ===== Phase 31: Database & Data Tests =====
+
+    #[test]
+    fn test_csv_parse() {
+        let (result, output) = run_vryn(r#"
+            var data = csv_parse("a,b,c\n1,2,3")
+            println(len(data))
+            println(len(data[0]))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+        assert_eq!(output[1], "3");
+    }
+
+    #[test]
+    fn test_csv_stringify() {
+        let (result, output) = run_vryn(r#"
+            let data = [["a", "b"], ["1", "2"]]
+            let s = csv_stringify(data)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("a,b"));
+    }
+
+    #[test]
+    fn test_kv_new_and_set_get() {
+        let (result, output) = run_vryn(r#"
+            var store = kv_new()
+            store = kv_set(store, "name", "vryn")
+            let val = kv_get(store, "name")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "vryn");
+    }
+
+    #[test]
+    fn test_kv_has_and_len() {
+        let (result, output) = run_vryn(r#"
+            var store = kv_new()
+            store = kv_set(store, "a", 1)
+            store = kv_set(store, "b", 2)
+            println(kv_has(store, "a"))
+            println(kv_has(store, "c"))
+            println(kv_len(store))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+        assert_eq!(output[2], "2");
+    }
+
+    #[test]
+    fn test_kv_del_and_keys() {
+        let (result, output) = run_vryn(r#"
+            var store = kv_new()
+            store = kv_set(store, "x", 10)
+            store = kv_set(store, "y", 20)
+            store = kv_del(store, "x")
+            println(kv_len(store))
+            let keys = kv_keys(store)
+            println(keys)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+    }
+
+    #[test]
+    fn test_kv_clear() {
+        let (result, output) = run_vryn(r#"
+            var store = kv_new()
+            store = kv_set(store, "a", 1)
+            store = kv_set(store, "b", 2)
+            store = kv_clear(store)
+            println(kv_len(store))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_serialize_deserialize_int() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize(42)
+            println(s)
+            let v = deserialize(s)
+            println(v)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "i:42");
+        assert_eq!(output[1], "42");
+    }
+
+    #[test]
+    fn test_serialize_deserialize_str() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize("hello")
+            println(s)
+            let v = deserialize(s)
+            println(v)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "s:hello");
+        assert_eq!(output[1], "hello");
+    }
+
+    #[test]
+    fn test_serialize_bool() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize(true)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "b:true");
+    }
+
+    // ===== Phase 33: Cross-Compilation & Platform Tests =====
+
+    #[test]
+    fn test_platform_os() {
+        let (result, output) = run_vryn(r#"
+            let os = platform_os()
+            println(type_of(os))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "str");
+    }
+
+    #[test]
+    fn test_platform_arch() {
+        let (result, output) = run_vryn(r#"
+            let arch = platform_arch()
+            println(type_of(arch))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "str");
+    }
+
+    #[test]
+    fn test_platform_endian() {
+        let (result, output) = run_vryn(r#"
+            let e = platform_endian()
+            println(e)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0] == "little" || output[0] == "big");
+    }
+
+    #[test]
+    fn test_platform_pointer_size() {
+        let (result, output) = run_vryn(r#"
+            let ps = platform_pointer_size()
+            println(ps)
+        "#);
+        assert!(result.is_ok());
+        let size: i64 = output[0].parse().unwrap();
+        assert!(size == 4 || size == 8);
+    }
+
+    #[test]
+    fn test_sizeof_types() {
+        let (result, output) = run_vryn(r#"
+            println(sizeof("int"))
+            println(sizeof("float"))
+            println(sizeof("bool"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "8");
+        assert_eq!(output[1], "8");
+        assert_eq!(output[2], "1");
+    }
+
+    #[test]
+    fn test_bitwise_and() {
+        let (result, output) = run_vryn(r#"
+            println(bitwise_and(12, 10))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "8");
+    }
+
+    #[test]
+    fn test_bitwise_or() {
+        let (result, output) = run_vryn(r#"
+            println(bitwise_or(12, 10))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "14");
+    }
+
+    #[test]
+    fn test_bitwise_xor() {
+        let (result, output) = run_vryn(r#"
+            println(bitwise_xor(12, 10))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "6");
+    }
+
+    #[test]
+    fn test_bitwise_shl_shr() {
+        let (result, output) = run_vryn(r#"
+            println(bitwise_shl(1, 4))
+            println(bitwise_shr(16, 2))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "16");
+        assert_eq!(output[1], "4");
+    }
+
+    #[test]
+    fn test_to_hex_from_hex() {
+        let (result, output) = run_vryn(r#"
+            let h = to_hex(255)
+            println(h)
+            let n = from_hex("ff")
+            println(n)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "ff");
+        assert_eq!(output[1], "255");
+    }
+
+    #[test]
+    fn test_to_binary_from_binary() {
+        let (result, output) = run_vryn(r#"
+            let b = to_binary(10)
+            println(b)
+            let n = from_binary("1010")
+            println(n)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1010");
+        assert_eq!(output[1], "10");
+    }
+
+    #[test]
+    fn test_to_octal() {
+        let (result, output) = run_vryn(r#"
+            println(to_octal(8))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    #[test]
+    fn test_byte_array() {
+        let (result, output) = run_vryn(r#"
+            let arr = byte_array(4)
+            println(len(arr))
+            println(arr[0])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "4");
+        assert_eq!(output[1], "0");
+    }
+
+    #[test]
+    fn test_bytes_to_str() {
+        let (result, output) = run_vryn(r#"
+            let arr = [72, 105]
+            let s = bytes_to_str(arr)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Hi");
     }
 }
