@@ -329,11 +329,18 @@ impl TypeChecker {
                 Ok(())
             }
 
+            Statement::Const { name, value } => {
+                let value_type = self.infer_expr(value)?;
+                self.env.define(name.clone(), value_type, false);
+                Ok(())
+            }
+
             Statement::Function {
                 name: _,
                 params,
                 return_type,
                 body,
+                is_async: _,
             } => {
                 self.env.push_scope();
 
@@ -550,6 +557,13 @@ impl TypeChecker {
                         self.check_statement(stmt)?;
                     }
                 }
+                Ok(())
+            }
+
+            Statement::Const { name: _, value } => {
+                // Constants must have a value that can be evaluated at compile time
+                // For now, we just type check the expression
+                let _value_type = self.infer_expr(value)?;
                 Ok(())
             }
 
@@ -888,6 +902,18 @@ impl TypeChecker {
             Expression::Self_ => {
                 // Self references are allowed in method contexts
                 // For now, return Any type
+                Ok(VrynType::Any)
+            }
+
+            Expression::Await { expr } => {
+                // Await extracts the inner type from a Future
+                let _future_type = self.infer_expr(expr)?;
+                // For now, return Any type (would need Future wrapping to properly unwrap)
+                Ok(VrynType::Any)
+            }
+
+            Expression::Spawn { body: _ } => {
+                // Spawn creates a task and returns a TaskHandle
                 Ok(VrynType::Any)
             }
         }

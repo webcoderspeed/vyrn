@@ -39,6 +39,23 @@ pub enum Value {
         ok: bool,
         value: Box<Value>,
     },
+    /// Future type: represents an async computation
+    Future {
+        params: Vec<Param>,
+        body: Vec<Statement>,
+        is_resolved: bool,
+        resolved_value: Option<Box<Value>>,
+    },
+    /// Channel type: for sending/receiving values between tasks
+    Channel {
+        id: usize,
+        messages: Vec<Value>,
+    },
+    /// Task handle: returned from spawn
+    TaskHandle {
+        id: usize,
+        result: Option<Box<Value>>,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -86,14 +103,37 @@ impl std::fmt::Display for Value {
                     write!(f, "Err({})", value)
                 }
             }
+            Value::Future { is_resolved, resolved_value, .. } => {
+                if *is_resolved {
+                    write!(f, "<resolved future: {}>", resolved_value.as_ref().unwrap())
+                } else {
+                    write!(f, "<future>")
+                }
+            }
+            Value::Channel { id, messages } => {
+                write!(f, "<channel #{} ({} msgs)>", id, messages.len())
+            }
+            Value::TaskHandle { id, result } => {
+                if result.is_some() {
+                    write!(f, "<task #{} (done)>", id)
+                } else {
+                    write!(f, "<task #{} (pending)>", id)
+                }
+            }
         }
     }
 }
 
 /// The runtime environment — holds variables in nested scopes
 #[derive(Debug, Clone)]
+/// Represents a variable's metadata: value and mutability
+pub struct Variable {
+    pub value: Value,
+    pub mutable: bool,
+}
+
 pub struct Environment {
-    scopes: Vec<HashMap<String, Value>>,
+    scopes: Vec<HashMap<String, Variable>>,
 }
 
 impl Environment {
@@ -111,25 +151,40 @@ impl Environment {
         self.scopes.pop();
     }
 
-    pub fn define(&mut self, name: &str, value: Value) {
+    /// Define a new variable with optional mutability flag
+    pub fn define(&mut self, name: &str, value: Value, mutable: bool) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(name.to_string(), value);
+            scope.insert(name.to_string(), Variable { value, mutable });
         }
     }
 
     pub fn get(&self, name: &str) -> Option<&Value> {
         for scope in self.scopes.iter().rev() {
-            if let Some(val) = scope.get(name) {
-                return Some(val);
+            if let Some(var) = scope.get(name) {
+                return Some(&var.value);
             }
         }
         None
     }
 
+    /// Check if a variable is mutable
+    pub fn is_mutable(&self, name: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            if let Some(var) = scope.get(name) {
+                return var.mutable;
+            }
+        }
+        false
+    }
+
+    /// Set a variable's value, enforcing mutability
     pub fn set(&mut self, name: &str, value: Value) -> Result<(), String> {
         for scope in self.scopes.iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_string(), value);
+            if let Some(var) = scope.get_mut(name) {
+                if !var.mutable {
+                    return Err(format!("Cannot assign to immutable variable '{}'", name));
+                }
+                var.value = value;
                 return Ok(());
             }
         }
@@ -183,9 +238,16 @@ impl Interpreter {
     /// Execute a single statement
     fn exec_statement(&mut self, stmt: &Statement) -> Result<Signal, String> {
         match stmt {
-            Statement::Let { name, value, .. } => {
+            Statement::Let { name, value, mutable, .. } => {
                 let val = self.eval_expression(value)?;
-                self.env.define(name, val);
+                self.env.define(name, val, *mutable);
+                Ok(Signal::None)
+            }
+
+            Statement::Const { name, value } => {
+                let val = self.eval_expression(value)?;
+                // Constants are always immutable and defined in current scope
+                self.env.define(name, val, false);
                 Ok(Signal::None)
             }
 
@@ -195,7 +257,7 @@ impl Interpreter {
                     params: params.clone(),
                     body: body.clone(),
                 };
-                self.env.define(name, func);
+                self.env.define(name, func, false);
                 Ok(Signal::None)
             }
 
@@ -245,7 +307,7 @@ impl Interpreter {
                 if self.pattern_matches(&val, pattern, &mut bindings)? {
                     self.env.push_scope();
                     for (name, value) in bindings {
-                        self.env.define(&name, value);
+                        self.env.define(&name, value, false);
                     }
                     for s in then_body {
                         let sig = self.exec_statement(s)?;
@@ -300,7 +362,7 @@ impl Interpreter {
 
                     self.env.push_scope();
                     for (name, value) in bindings {
-                        self.env.define(&name, value);
+                        self.env.define(&name, value, false);
                     }
                     let mut should_break = false;
                     for s in body {
@@ -323,7 +385,7 @@ impl Interpreter {
                     Value::Array(items) => {
                         for item in items {
                             self.env.push_scope();
-                            self.env.define(var, item);
+                            self.env.define(var, item, false);
                             let mut should_break = false;
                             for s in body {
                                 match self.exec_statement(s)? {
@@ -347,7 +409,7 @@ impl Interpreter {
 
             Statement::Struct { name, .. } => {
                 // For now, just register the struct name
-                self.env.define(name, Value::None);
+                self.env.define(name, Value::None, false);
                 Ok(Signal::None)
             }
 
@@ -357,7 +419,7 @@ impl Interpreter {
                     name: name.clone(),
                     variants: variant_names,
                 };
-                self.env.define(name, enum_type);
+                self.env.define(name, enum_type, false);
                 Ok(Signal::None)
             }
 
@@ -370,7 +432,7 @@ impl Interpreter {
                 // 4. Store exported names under the module alias
                 // For testing, we just create a module namespace
                 let module_name = alias.clone().unwrap_or_else(|| path.clone());
-                self.env.define(&module_name, Value::None);
+                self.env.define(&module_name, Value::None, false);
                 Ok(Signal::None)
             }
 
@@ -499,6 +561,9 @@ impl Interpreter {
                                 Value::EnumType { .. } => "enum",
                                 Value::Variant { .. } => "variant",
                                 Value::Result { .. } => "Result",
+                                Value::Future { .. } => "future",
+                                Value::Channel { .. } => "channel",
+                                Value::TaskHandle { .. } => "task_handle",
                             };
                             return Ok(Value::Str(type_name.to_string()));
                         }
@@ -1093,7 +1158,7 @@ impl Interpreter {
                         // Create new scope with parameters
                         self.env.push_scope();
                         for (param, val) in params.iter().zip(arg_values) {
-                            self.env.define(&param.name, val);
+                            self.env.define(&param.name, val, false);
                         }
 
                         // Execute body
@@ -1158,11 +1223,11 @@ impl Interpreter {
                         match func_val {
                             Value::Function { params, body, .. } => {
                                 self.env.push_scope();
-                                self.env.define(&params[0].name, left_val);
+                                self.env.define(&params[0].name, left_val, false);
                                 for (i, arg) in args.iter().enumerate() {
                                     if i + 1 < params.len() {
                                         let val = self.eval_expression(arg)?;
-                                        self.env.define(&params[i + 1].name, val);
+                                        self.env.define(&params[i + 1].name, val, false);
                                     }
                                 }
                                 let mut result = Value::None;
@@ -1185,7 +1250,7 @@ impl Interpreter {
                             Value::Function { params, body, .. } => {
                                 self.env.push_scope();
                                 if !params.is_empty() {
-                                    self.env.define(&params[0].name, left_val);
+                                    self.env.define(&params[0].name, left_val, false);
                                 }
                                 let mut result = Value::None;
                                 for stmt in &body {
@@ -1267,7 +1332,7 @@ impl Interpreter {
                     if self.pattern_matches(&val, &arm.pattern, &mut bindings)? { // line 725
                         self.env.push_scope();
                         for (name, value) in bindings {
-                            self.env.define(&name, value);
+                            self.env.define(&name, value, false);
                         }
                         let result = self.eval_expression(&arm.body);
                         self.env.pop_scope();
@@ -1281,9 +1346,17 @@ impl Interpreter {
                 self.env.push_scope();
                 let mut result = Value::None;
                 for stmt in stmts {
-                    match self.exec_statement(stmt)? {
-                        Signal::Return(v) => { result = v; break; }
-                        _ => {}
+                    match stmt {
+                        Statement::Expression(expr) => {
+                            // For expression statements, use the value as the block's result
+                            result = self.eval_expression(expr)?;
+                        }
+                        _ => {
+                            match self.exec_statement(stmt)? {
+                                Signal::Return(v) => { result = v; break; }
+                                _ => {}
+                            }
+                        }
                     }
                 }
                 self.env.pop_scope();
@@ -1319,7 +1392,7 @@ impl Interpreter {
                         Err(err) => {
                             // Caught an error, bind it to the catch variable and run catch block
                             caught_error = true;
-                            self.env.define(catch_var, Value::Str(err));
+                            self.env.define(catch_var, Value::Str(err), false);
                             break;
                         }
                     }
@@ -1392,7 +1465,7 @@ impl Interpreter {
                     
                     // Bind self
                     self.current_self = Some(obj_val.clone());
-                    self.env.define("self", obj_val);
+                    self.env.define("self", obj_val, false);
                     
                     // Bind parameters (skip first parameter if it's "self")
                     let params_to_bind = if !impl_method.params.is_empty() && impl_method.params[0].name == "self" {
@@ -1402,7 +1475,7 @@ impl Interpreter {
                     };
                     
                     for (param, arg_val) in params_to_bind.iter().zip(arg_vals) {
-                        self.env.define(&param.name, arg_val);
+                        self.env.define(&param.name, arg_val, false);
                     }
                     
                     // Execute method body
@@ -1431,6 +1504,56 @@ impl Interpreter {
                 } else {
                     Err("'self' used outside method context".to_string())
                 }
+            }
+
+            Expression::Await { expr } => {
+                // In the tree-walking interpreter, we simply evaluate the expression
+                // and if it's a Future, we resolve it; if it's a TaskHandle, extract result
+                let val = self.eval_expression(expr)?;
+                match val {
+                    Value::Future { params: _, body, is_resolved, resolved_value } => {
+                        if is_resolved && resolved_value.is_some() {
+                            Ok(*resolved_value.unwrap())
+                        } else {
+                            // Execute the future body with no arguments
+                            self.env.push_scope();
+                            let mut result = Value::None;
+                            for stmt in &body {
+                                match self.exec_statement(stmt)? {
+                                    Signal::Return(v) => {
+                                        result = v;
+                                        break;
+                                    }
+                                    Signal::Break | Signal::Continue => {
+                                        return Err("break/continue outside loop".to_string());
+                                    }
+                                    Signal::None => {}
+                                }
+                            }
+                            self.env.pop_scope();
+                            Ok(result)
+                        }
+                    }
+                    Value::TaskHandle { id: _, result } => {
+                        if let Some(res) = result {
+                            Ok(*res)
+                        } else {
+                            Ok(Value::None)
+                        }
+                    }
+                    other => Ok(other)  // Non-futures are returned as-is
+                }
+            }
+
+            Expression::Spawn { body } => {
+                // In the tree-walking interpreter, spawn simply evaluates the body
+                // and wraps it in a TaskHandle
+                let result = self.eval_expression(body)?;
+                let handle_id = 0;  // Simplified: just use 0
+                Ok(Value::TaskHandle {
+                    id: handle_id,
+                    result: Some(Box::new(result)),
+                })
             }
         }
     }
@@ -1677,7 +1800,7 @@ impl Interpreter {
                 // We need to temporarily set the bindings in the environment to evaluate the condition
                 self.env.push_scope();
                 for (name, val) in bindings.iter() {
-                    self.env.define(name, val.clone());
+                    self.env.define(name, val.clone(), false);
                 }
                 let guard_result = match self.eval_expression(condition) {
                     Ok(cond_value) => self.is_truthy(&cond_value),
@@ -3289,5 +3412,296 @@ mod tests {
         assert_eq!(output[1], "Woof");
     }
 
+
+    // ===== MEMORY MODEL TESTS =====
+
+    #[test]
+    fn test_mutability_enforcement_let_is_immutable() {
+        // let variables are immutable by default
+        let (result, _) = run_vryn(r#"
+            let x = 5
+            x = 10
+        "#);
+        // Should error: cannot assign to immutable variable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mutability_enforcement_var_is_mutable() {
+        // var variables are mutable
+        let (result, output) = run_vryn(r#"
+            var x = 5
+            x = 10
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    #[test]
+    fn test_const_definition_basic() {
+        // const can be defined and used
+        let (result, output) = run_vryn(r#"
+            const PI = 3
+            println(PI)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+    }
+
+    #[test]
+    fn test_const_cannot_be_reassigned() {
+        // const is immutable
+        let (result, _) = run_vryn(r#"
+            const MAX = 100
+            MAX = 200
+        "#);
+        // Should error: cannot assign to immutable variable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_const_with_expression() {
+        // const can have expressions as values
+        let (result, output) = run_vryn(r#"
+            const SIZE = 10 + 5
+            println(SIZE)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "15");
+    }
+
+    #[test]
+    fn test_mutability_in_scope() {
+        // Variables should not be accessible outside their scope
+        let (result, _) = run_vryn(r#"
+            if true {
+                let x = 5
+            }
+            println(x)
+        "#);
+        // Should error: undefined variable
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_var_mutation_in_loop() {
+        // var can be mutated in a loop
+        let (result, output) = run_vryn(r#"
+            var sum = 0
+            for i in 0..3 {
+                sum = sum + i
+            }
+            println(sum)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+    }
+
+    #[test]
+    fn test_let_variable_in_function() {
+        // let is default in function parameters
+        let (result, output) = run_vryn(r#"
+            fun addOne(x: int) -> int {
+                let result = x + 1
+                return result
+            }
+            println(addOne(5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "6");
+    }
+
+    #[test]
+    fn test_copy_semantics_on_primitive_assignment() {
+        // Primitives copy on assignment
+        let (result, output) = run_vryn(r#"
+            let a = 5
+            let b = a
+            println(a)
+            println(b)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "5");
+    }
+
+    #[test]
+    fn test_array_copy_on_assignment() {
+        // Arrays copy (deep clone) on assignment
+        let (result, output) = run_vryn(r#"
+            let arr1 = [1, 2, 3]
+            let arr2 = arr1
+            println(arr1)
+            println(arr2)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[1, 2, 3]");
+        assert_eq!(output[1], "[1, 2, 3]");
+    }
+
+    #[test]
+    fn test_const_in_multiple_scopes() {
+        // const defined in different scopes
+        let (result, output) = run_vryn(r#"
+            const GLOBAL = 10
+            if true {
+                const LOCAL = 20
+                println(LOCAL)
+            }
+            println(GLOBAL)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "20");
+        assert_eq!(output[1], "10");
+    }
+
+    #[test]
+    fn test_var_vs_let_semantic_difference() {
+        // Demonstrate var vs let difference
+        let (result, output) = run_vryn(r#"
+            var counter = 0
+            let MAX = 5
+            for i in 0..3 {
+                counter = counter + 1
+            }
+            println(counter)
+            println(MAX)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "5");
+    }
+
+    #[test]
+    fn test_async_function_definition() {
+        let (result, output) = run_vryn(r#"
+            async fun fetch_data() {
+                println("fetching")
+                return 42
+            }
+            println("async fn defined")
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "async fn defined");
+    }
+
+    #[test]
+    fn test_async_function_call_and_await() {
+        let (result, output) = run_vryn(r#"
+            async fun compute(x: int) {
+                return x * 2
+            }
+            let task = compute(21)
+            let result = await task
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_spawn_basic() {
+        let (result, output) = run_vryn(r#"
+            let handle = spawn {
+                println("spawned task")
+                100
+            }
+            println("after spawn")
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "spawned task");
+        assert_eq!(output[1], "after spawn");
+    }
+
+    #[test]
+    fn test_spawn_with_computation() {
+        let (result, output) = run_vryn(r#"
+            let handle = spawn {
+                let sum = 10 + 20
+                sum
+            }
+            println(handle)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("task"));
+    }
+
+    #[test]
+    fn test_await_on_spawned_task() {
+        let (result, output) = run_vryn(r#"
+            let result = await spawn {
+                100 + 50
+            }
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "150");
+    }
+
+    #[test]
+    fn test_async_with_multiple_awaits() {
+        let (result, output) = run_vryn(r#"
+            async fun task1() {
+                return 10
+            }
+            async fun task2() {
+                return 20
+            }
+            let t1 = task1()
+            let t2 = task2()
+            let r1 = await t1
+            let r2 = await t2
+            println(r1 + r2)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "30");
+    }
+
+    #[test]
+    fn test_spawn_nested_block() {
+        let (result, output) = run_vryn(r#"
+            let result = spawn {
+                if true {
+                    println("nested in spawn")
+                    42
+                } else {
+                    0
+                }
+            }
+            println("done")
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "nested in spawn");
+        assert_eq!(output[1], "done");
+    }
+
+    #[test]
+    fn test_async_function_with_parameter() {
+        let (result, output) = run_vryn(r#"
+            async fun double(x: int) {
+                println(x * 2)
+                return x * 2
+            }
+            let task = double(5)
+            let res = await task
+            println(res)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+        assert_eq!(output[1], "10");
+    }
+
+    #[test]
+    fn test_concurrency_primitives_type_of() {
+        let (result, output) = run_vryn(r#"
+            let handle = spawn {
+                42
+            }
+            println(type_of(handle))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "task_handle");
+    }
 
 }

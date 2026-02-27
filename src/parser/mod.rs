@@ -35,9 +35,18 @@ impl Parser {
         self.skip_newlines();
 
         match self.current_kind() {
+            TokenKind::Async => {
+                self.advance();
+                if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+                    self.parse_async_function()
+                } else {
+                    Err("Expected 'fun' or 'fn' after 'async'".to_string())
+                }
+            }
             TokenKind::Fun | TokenKind::Fn => self.parse_function(),
             TokenKind::Var => self.parse_var(),
             TokenKind::Let => self.parse_let(),
+            TokenKind::Const => self.parse_const(),
             TokenKind::If => self.parse_if(),
             TokenKind::While => self.parse_while(),
             TokenKind::For => self.parse_for(),
@@ -59,6 +68,33 @@ impl Parser {
     /// Parse: fun name(params) -> ReturnType { body }
     /// Also accepts: fn (backward compat alias)
     /// Type annotations are OPTIONAL: fun add(a, b) { ... } or fun add(a: int, b: int) -> int { ... }
+    /// Parse: async fun name(params) -> ReturnType { body }
+    fn parse_async_function(&mut self) -> Result<Statement, String> {
+        // 'async' has already been consumed
+        // Accept both `fun` and `fn`
+        if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+            self.advance();
+        } else {
+            return Err("Expected 'fun' or 'fn' after 'async'".to_string());
+        }
+        let name = self.expect_identifier()?;
+        self.expect(TokenKind::LeftParen)?;
+
+        let params = self.parse_params()?;
+        self.expect(TokenKind::RightParen)?;
+
+        let return_type = if self.check(&TokenKind::ThinArrow) {
+            self.advance();
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+
+        let body = self.parse_block()?;
+
+        Ok(Statement::Function { name, params, return_type, body, is_async: true })
+    }
+
     fn parse_function(&mut self) -> Result<Statement, String> {
         // Accept both `fun` and `fn`
         if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
@@ -81,7 +117,7 @@ impl Parser {
 
         let body = self.parse_block()?;
 
-        Ok(Statement::Function { name, params, return_type, body })
+        Ok(Statement::Function { name, params, return_type, body, is_async: false })
     }
 
     /// Parse function parameters — type annotations are OPTIONAL!
@@ -164,6 +200,16 @@ impl Parser {
         let value = self.parse_expression()?;
 
         Ok(Statement::Let { name, mutable, type_ann, value })
+    }
+
+    /// Parse: const NAME = value
+    /// Constants are compile-time, always immutable, and must be evaluated at parse time
+    fn parse_const(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Const)?;
+        let name = self.expect_identifier()?;
+        self.expect(TokenKind::Equal)?;
+        let value = self.parse_expression()?;
+        Ok(Statement::Const { name, value })
     }
 
     /// Parse: if [let pattern = expr] condition { body } [else { body }]
@@ -664,7 +710,7 @@ impl Parser {
         Ok(left)
     }
 
-    /// Unary: -x, !x
+    /// Unary: -x, !x, await expr
     fn parse_unary(&mut self) -> Result<Expression, String> {
         match self.current_kind() {
             TokenKind::Minus => {
@@ -682,6 +728,39 @@ impl Parser {
                     op: UnaryOperator::Not,
                     operand: Box::new(operand),
                 })
+            }
+            TokenKind::Await => {
+                self.advance();
+                let expr = self.parse_unary()?;
+                Ok(Expression::Await {
+                    expr: Box::new(expr),
+                })
+            }
+            TokenKind::Spawn => {
+                self.advance();
+                // Spawn expects a block { ... } or an expression
+                if self.check(&TokenKind::LeftBrace) {
+                    // Parse as a block expression
+                    self.advance();
+                    let mut stmts = Vec::new();
+                    while !self.check(&TokenKind::RightBrace) {
+                        self.skip_newlines();
+                        if self.check(&TokenKind::RightBrace) { break; }
+                        // Parse full statements
+                        stmts.push(self.parse_statement()?);
+                    }
+                    self.expect(TokenKind::RightBrace)?;
+                    let body = Expression::Block(stmts);
+                    Ok(Expression::Spawn {
+                        body: Box::new(body),
+                    })
+                } else {
+                    // If no block, just parse the next expression
+                    let body = self.parse_unary()?;
+                    Ok(Expression::Spawn {
+                        body: Box::new(body),
+                    })
+                }
             }
             _ => self.parse_call(),
         }

@@ -17,12 +17,18 @@ pub enum Statement {
         type_ann: Option<String>,  // optional type annotation
         value: Expression,
     },
-    /// fn name(params) -> return_type { body }
+    /// const NAME = value (compile-time constant, always immutable)
+    Const {
+        name: String,
+        value: Expression,
+    },
+    /// fn name(params) -> return_type { body } or async fn name(params) -> return_type { body }
     Function {
         name: String,
         params: Vec<Param>,
         return_type: Option<String>,
         body: Vec<Statement>,
+        is_async: bool,  // true if declared with 'async'
     },
     /// struct Name { fields }
     Struct {
@@ -218,6 +224,14 @@ pub enum Expression {
     },
     /// Self reference
     Self_,
+    /// Await expression: await future_expr
+    Await {
+        expr: Box<Expression>,
+    },
+    /// Spawn expression: spawn { body }
+    Spawn {
+        body: Box<Expression>,
+    },
 }
 
 #[derive(Debug, Clone)]
