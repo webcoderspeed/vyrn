@@ -44,6 +44,9 @@ impl Parser {
             TokenKind::Return => self.parse_return(),
             TokenKind::Struct => self.parse_struct(),
             TokenKind::Enum => self.parse_enum(),
+            TokenKind::Trait => self.parse_trait(),
+            TokenKind::Impl => self.parse_impl(),
+            TokenKind::Import | TokenKind::Use => self.parse_import(),
             TokenKind::Break => { self.advance(); Ok(Statement::Break) }
             TokenKind::Continue => { self.advance(); Ok(Statement::Continue) }
             _ => {
@@ -85,6 +88,7 @@ impl Parser {
     /// fun add(a, b) { ... }            — no types (inferred as "any")
     /// fun add(a: int, b: int) { ... }  — with types
     /// fun add(a, b: int) { ... }       — mixed
+    /// fun add(self, a, b) { ... }      — with self (for methods)
     fn parse_params(&mut self) -> Result<Vec<Param>, String> {
         let mut params = Vec::new();
 
@@ -93,7 +97,14 @@ impl Parser {
         }
 
         loop {
-            let name = self.expect_identifier()?;
+            // Handle 'self' as a special parameter (for methods)
+            let name = if self.check(&TokenKind::SelfKw) {
+                self.advance();
+                "self".to_string()
+            } else {
+                self.expect_identifier()?
+            };
+            
             let type_name = if self.check(&TokenKind::Colon) {
                 self.advance();
                 self.expect_identifier()?
@@ -305,6 +316,115 @@ impl Parser {
     }
 
     /// Parse a block: { statement* }
+    /// Parse: trait Name { method1, method2, ... }
+    fn parse_trait(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Trait)?;
+        let name = self.expect_identifier()?;
+        self.skip_newlines();
+        self.expect(TokenKind::LeftBrace)?;
+
+        let mut methods = Vec::new();
+        self.skip_newlines();
+
+        while !self.check(&TokenKind::RightBrace) {
+            // Expect 'fun' or 'fn'
+            if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+                self.advance();
+            } else {
+                return Err("Expected 'fun' or 'fn' in trait".to_string());
+            }
+
+            let method_name = self.expect_identifier()?;
+            self.expect(TokenKind::LeftParen)?;
+            let params = self.parse_params()?;
+            self.expect(TokenKind::RightParen)?;
+
+            let return_type = if self.check(&TokenKind::ThinArrow) {
+                self.advance();
+                Some(self.expect_identifier()?)
+            } else {
+                None
+            };
+
+            methods.push(TraitMethod {
+                name: method_name,
+                params,
+                return_type,
+            });
+
+            self.skip_newlines();
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+            self.skip_newlines();
+        }
+
+        self.expect(TokenKind::RightBrace)?;
+        Ok(Statement::Trait { name, methods })
+    }
+
+    /// Parse: impl TraitName for TypeName { methods } OR impl TypeName { methods }
+    fn parse_impl(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Impl)?;
+        
+        let first_name = self.expect_identifier()?;
+        
+        let (trait_name, type_name) = if self.check(&TokenKind::For) {
+            // impl TraitName for TypeName
+            self.advance();
+            let type_n = self.expect_identifier()?;
+            (Some(first_name), type_n)
+        } else {
+            // impl TypeName
+            (None, first_name)
+        };
+
+        self.skip_newlines();
+        self.expect(TokenKind::LeftBrace)?;
+
+        let mut methods = Vec::new();
+        self.skip_newlines();
+
+        while !self.check(&TokenKind::RightBrace) {
+            // Expect 'fun' or 'fn'
+            if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+                self.advance();
+            } else {
+                return Err("Expected 'fun' or 'fn' in impl".to_string());
+            }
+
+            let method_name = self.expect_identifier()?;
+            self.expect(TokenKind::LeftParen)?;
+            let params = self.parse_params()?;
+            self.expect(TokenKind::RightParen)?;
+
+            let return_type = if self.check(&TokenKind::ThinArrow) {
+                self.advance();
+                Some(self.expect_identifier()?)
+            } else {
+                None
+            };
+
+            let body = self.parse_block()?;
+
+            methods.push(ImplMethod {
+                name: method_name,
+                params,
+                return_type,
+                body,
+            });
+
+            self.skip_newlines();
+        }
+
+        self.expect(TokenKind::RightBrace)?;
+        Ok(Statement::Impl {
+            trait_name,
+            type_name,
+            methods,
+        })
+    }
+
     fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
         self.skip_newlines();
         self.expect(TokenKind::LeftBrace)?;
@@ -325,6 +445,36 @@ impl Parser {
     //           EXPRESSION PARSING
     //   (Pratt parser / precedence climbing)
     // ==========================================
+
+    /// Parse: import "path/to/file" or use "module" as alias
+    fn parse_import(&mut self) -> Result<Statement, String> {
+        // Consume 'import' or 'use'
+        if self.check(&TokenKind::Import) || self.check(&TokenKind::Use) {
+            self.advance();
+        } else {
+            return Err("Expected 'import' or 'use'".to_string());
+        }
+
+        // Expect string literal (the module path)
+        let path = match self.current_kind() {
+            TokenKind::StringLiteral(ref s) => {
+                let s = s.clone();
+                self.advance();
+                s
+            }
+            _ => return Err("Expected string literal for import path".to_string()),
+        };
+
+        // Optional: as alias
+        let alias = if self.check(&TokenKind::As) {
+            self.advance();
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+
+        Ok(Statement::Import { path, alias })
+    }
 
     fn parse_expression(&mut self) -> Result<Expression, String> {
         self.parse_pipe()
@@ -553,10 +703,23 @@ impl Parser {
             } else if self.check(&TokenKind::Dot) || self.check(&TokenKind::ColonColon) {
                 self.advance();
                 let member = self.expect_identifier()?;
-                expr = Expression::MemberAccess {
-                    object: Box::new(expr),
-                    member,
-                };
+                
+                // Check if this is a method call (followed by parentheses)
+                if self.check(&TokenKind::LeftParen) {
+                    self.advance();
+                    let args = self.parse_args()?;
+                    self.expect(TokenKind::RightParen)?;
+                    expr = Expression::MethodCall {
+                        object: Box::new(expr),
+                        method: member,
+                        args,
+                    };
+                } else {
+                    expr = Expression::MemberAccess {
+                        object: Box::new(expr),
+                        member,
+                    };
+                }
             } else if self.check(&TokenKind::LeftBracket) {
                 self.advance();
                 let index = self.parse_expression()?;
@@ -681,6 +844,10 @@ impl Parser {
                 let val = b;
                 self.advance();
                 Ok(Expression::BoolLiteral(val))
+            }
+            TokenKind::SelfKw => {
+                self.advance();
+                Ok(Expression::Self_)
             }
             TokenKind::Identifier(ref name) => {
                 let name = name.clone();

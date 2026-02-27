@@ -34,6 +34,22 @@ pub enum Statement {
         name: String,
         variants: Vec<EnumVariant>,
     },
+    /// trait Name { methods }
+    Trait {
+        name: String,
+        methods: Vec<TraitMethod>,
+    },
+    /// impl TraitName for TypeName { methods } OR impl TypeName { methods }
+    Impl {
+        trait_name: Option<String>,  // None for impl without trait
+        type_name: String,
+        methods: Vec<ImplMethod>,
+    },
+    /// import path or use path
+    Import {
+        path: String,
+        alias: Option<String>,
+    },
     /// expression as statement (function call, assignment, etc.)
     Expression(Expression),
     /// return value
@@ -90,6 +106,23 @@ pub struct Field {
 pub struct EnumVariant {
     pub name: String,
     pub fields: Vec<String>, // type names
+}
+
+/// A method definition in a trait
+#[derive(Debug, Clone)]
+pub struct TraitMethod {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub return_type: Option<String>,
+}
+
+/// A method implementation in an impl block
+#[derive(Debug, Clone)]
+pub struct ImplMethod {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub return_type: Option<String>,
+    pub body: Vec<Statement>,
 }
 
 // === Expressions ===
@@ -177,6 +210,14 @@ pub enum Expression {
     QuestionMark {
         expr: Box<Expression>,
     },
+    /// Method call: obj.method(args)
+    MethodCall {
+        object: Box<Expression>,
+        method: String,
+        args: Vec<Expression>,
+    },
+    /// Self reference
+    Self_,
 }
 
 #[derive(Debug, Clone)]

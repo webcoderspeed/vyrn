@@ -368,6 +368,10 @@ impl TypeChecker {
 
             Statement::Enum { .. } => Ok(()), // Already collected in first pass
 
+            Statement::Trait { .. } => Ok(()), // Trait definitions don't need type checking yet
+
+            Statement::Impl { .. } => Ok(()), // Impl blocks are checked at usage time
+
             Statement::Expression(expr) => {
                 self.infer_expr(expr)?;
                 Ok(())
@@ -546,6 +550,11 @@ impl TypeChecker {
                         self.check_statement(stmt)?;
                     }
                 }
+                Ok(())
+            }
+
+            Statement::Import { path: _, alias: _ } => {
+                // Import statements are checked during first pass
                 Ok(())
             }
         }
@@ -863,6 +872,22 @@ impl TypeChecker {
                 let _expr_type = self.infer_expr(expr)?;
                 // Question mark operator expects a Result type and unwraps it
                 // For now, we return Any to avoid strict type checking
+                Ok(VrynType::Any)
+            }
+
+            Expression::MethodCall { object, method, args } => {
+                // For now, just check that the object and args are valid
+                let _obj_type = self.infer_expr(object)?;
+                for arg in args {
+                    let _arg_type = self.infer_expr(arg)?;
+                }
+                // Return Any since we don't have full type information for methods yet
+                Ok(VrynType::Any)
+            }
+
+            Expression::Self_ => {
+                // Self references are allowed in method contexts
+                // For now, return Any type
                 Ok(VrynType::Any)
             }
         }

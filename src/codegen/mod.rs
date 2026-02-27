@@ -149,6 +149,9 @@ enum Signal {
 pub struct Interpreter {
     env: Environment,
     output: Vec<String>,  // captured output for testing
+    trait_defs: HashMap<String, Vec<TraitMethod>>,  // trait_name -> methods
+    impl_methods: HashMap<(String, String), Vec<ImplMethod>>,  // (type_name, method_name) -> method
+    current_self: Option<Value>,  // Current self in method execution
 }
 
 impl Interpreter {
@@ -156,6 +159,9 @@ impl Interpreter {
         Interpreter {
             env: Environment::new(),
             output: Vec::new(),
+            trait_defs: HashMap::new(),
+            impl_methods: HashMap::new(),
+            current_self: None,
         }
     }
 
@@ -354,6 +360,35 @@ impl Interpreter {
                 self.env.define(name, enum_type);
                 Ok(Signal::None)
             }
+
+            Statement::Import { path, alias } => {
+                // For now, we don't actually load files in the basic implementation.
+                // In a full implementation, we would:
+                // 1. Read the .vn file from disk
+                // 2. Lex and parse it
+                // 3. Execute it in a child scope
+                // 4. Store exported names under the module alias
+                // For testing, we just create a module namespace
+                let module_name = alias.clone().unwrap_or_else(|| path.clone());
+                self.env.define(&module_name, Value::None);
+                Ok(Signal::None)
+            }
+
+            Statement::Trait { name, methods } => {
+                self.trait_defs.insert(name.clone(), methods.clone());
+                Ok(Signal::None)
+            }
+
+            Statement::Impl { trait_name: _, type_name, methods } => {
+                // Store impl methods indexed by (type_name, method_name)
+                for method in methods {
+                    let key = (type_name.clone(), method.name.clone());
+                    self.impl_methods.insert(key, vec![method.clone()]);
+                }
+                Ok(Signal::None)
+            }
+
+
         }
     }
 
@@ -1324,6 +1359,77 @@ impl Interpreter {
                         }
                     }
                     _ => Err("? operator requires a Result type".to_string()),
+                }
+            }
+
+            Expression::MethodCall { object, method, args } => {
+                let obj_val = self.eval_expression(object)?;
+                
+                // Get the type name of the object
+                let type_name = match &obj_val {
+                    Value::Struct { name, .. } => name.clone(),
+                    Value::Int(_) => "int".to_string(),
+                    Value::Float(_) => "float".to_string(),
+                    Value::Str(_) => "str".to_string(),
+                    Value::Bool(_) => "bool".to_string(),
+                    Value::Array(_) => "array".to_string(),
+                    _ => return Err(format!("Cannot call method on {}", obj_val)),
+                };
+                
+                // Look up the method in impl_methods and clone it to avoid borrow issues
+                let key = (type_name.clone(), method.clone());
+                let impl_method_clone = self.impl_methods.get(&key).and_then(|mv| mv.first().cloned());
+                
+                if let Some(impl_method) = impl_method_clone {
+                    // Evaluate arguments
+                    let arg_vals: Result<Vec<_>, _> = args.iter()
+                        .map(|arg| self.eval_expression(arg))
+                        .collect();
+                    let arg_vals = arg_vals?;
+                    
+                    // Create new scope for method
+                    self.env.push_scope();
+                    
+                    // Bind self
+                    self.current_self = Some(obj_val.clone());
+                    self.env.define("self", obj_val);
+                    
+                    // Bind parameters (skip first parameter if it's "self")
+                    let params_to_bind = if !impl_method.params.is_empty() && impl_method.params[0].name == "self" {
+                        &impl_method.params[1..]
+                    } else {
+                        &impl_method.params[..]
+                    };
+                    
+                    for (param, arg_val) in params_to_bind.iter().zip(arg_vals) {
+                        self.env.define(&param.name, arg_val);
+                    }
+                    
+                    // Execute method body
+                    let mut result = Value::None;
+                    for stmt in &impl_method.body {
+                        match self.exec_statement(stmt)? {
+                            Signal::Return(v) => {
+                                result = v;
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                    
+                    self.current_self = None;
+                    self.env.pop_scope();
+                    Ok(result)
+                } else {
+                    Err(format!("Method '{}' not found on '{}'", method, type_name))
+                }
+            }
+
+            Expression::Self_ => {
+                if let Some(self_val) = &self.current_self {
+                    Ok(self_val.clone())
+                } else {
+                    Err("'self' used outside method context".to_string())
                 }
             }
         }
@@ -2847,4 +2953,341 @@ mod tests {
         assert_eq!(output[0], "42");
         assert_eq!(output[1], "1764");
     }
+    // === Module System Tests ===
+
+    #[test]
+    fn test_import_parsing() {
+        let (result, _output) = run_vryn(r#"
+            import "utils"
+            println("imported")
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_import_with_alias() {
+        let (result, _output) = run_vryn(r#"
+            use "math" as m
+            println("imported with alias")
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_multiple_imports() {
+        let (result, _output) = run_vryn(r#"
+            import "utils"
+            use "math" as m
+            import "helpers"
+            println("multiple imports")
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_import_with_nested_path() {
+        let (result, _output) = run_vryn(r#"
+            import "src/utils/helpers"
+            println("nested import")
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_use_keyword_alias() {
+        let (result, _output) = run_vryn(r#"
+            use "collections" as col
+            println("use with alias")
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_import_before_function() {
+        let (result, output) = run_vryn(r#"
+            import "math"
+            fun add(a, b) {
+                return a + b
+            }
+            println(add(5, 3))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "8");
+    }
+
+    #[test]
+    fn test_import_code_separation() {
+        // Test that imports don't interfere with code execution
+        let (result, output) = run_vryn(r#"
+            import "module1"
+            let x = 10
+            println(x)
+            use "module2" as m
+            let y = 20
+            println(y)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+        assert_eq!(output[1], "20");
+    }
+
+    #[test]
+    fn test_import_statement_execution_order() {
+        // Test that import statements execute properly without side effects
+        let (result, output) = run_vryn(r#"
+            println("before import")
+            import "utils"
+            println("after import")
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "before import");
+        assert_eq!(output[1], "after import");
+    }
+
+    // === Trait and Impl Tests ===
+
+    #[test]
+    fn test_simple_impl_method() {
+        let (result, output) = run_vryn(r#"
+            struct Point {
+                x: int,
+                y: int,
+            }
+
+            impl Point {
+                fun display(self) {
+                    println(self.x)
+                    println(self.y)
+                }
+            }
+
+            let p = Point { x: 5, y: 10 }
+            p.display()
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "10");
+    }
+
+    #[test]
+    fn test_impl_method_with_return() {
+        let (result, output) = run_vryn(r#"
+            struct Point {
+                x: int,
+                y: int,
+            }
+
+            impl Point {
+                fun sum(self) -> int {
+                    return self.x + self.y
+                }
+            }
+
+            let p = Point { x: 3, y: 7 }
+            println(p.sum())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    #[test]
+    fn test_impl_method_with_args() {
+        let (result, output) = run_vryn(r#"
+            struct Point {
+                x: int,
+                y: int,
+            }
+
+            impl Point {
+                fun add_offset(self, dx: int, dy: int) {
+                    println(self.x + dx)
+                    println(self.y + dy)
+                }
+            }
+
+            let p = Point { x: 5, y: 10 }
+            p.add_offset(2, 3)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "7");
+        assert_eq!(output[1], "13");
+    }
+
+    #[test]
+    fn test_self_reference_in_method() {
+        let (result, output) = run_vryn(r#"
+            struct Counter {
+                count: int,
+            }
+
+            impl Counter {
+                fun increment(self) -> int {
+                    return self.count + 1
+                }
+            }
+
+            let c = Counter { count: 5 }
+            println(c.increment())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "6");
+    }
+
+    #[test]
+    fn test_trait_definition() {
+        let (result, _output) = run_vryn(r#"
+            trait Printable {
+                fun to_string(self) -> str,
+            }
+
+            println("trait defined")
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_impl_with_trait() {
+        let (result, output) = run_vryn(r#"
+            trait Displayable {
+                fun display(self) -> str,
+            }
+
+            struct Message {
+                text: str,
+            }
+
+            impl Displayable for Message {
+                fun display(self) -> str {
+                    return self.text
+                }
+            }
+
+            let m = Message { text: "hello" }
+            println(m.display())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_multiple_methods() {
+        let (result, output) = run_vryn(r#"
+            struct Rectangle {
+                width: int,
+                height: int,
+            }
+
+            impl Rectangle {
+                fun area(self) -> int {
+                    return self.width * self.height
+                }
+
+                fun perimeter(self) -> int {
+                    return 2 * (self.width + self.height)
+                }
+            }
+
+            let r = Rectangle { width: 5, height: 3 }
+            println(r.area())
+            println(r.perimeter())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "15");
+        assert_eq!(output[1], "16");
+    }
+
+    #[test]
+    fn test_method_chaining() {
+        let (result, output) = run_vryn(r#"
+            struct Builder {
+                value: int,
+            }
+
+            impl Builder {
+                fun add(self, n: int) -> int {
+                    return self.value + n
+                }
+            }
+
+            let b = Builder { value: 10 }
+            let result = b.add(5)
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "15");
+    }
+
+    #[test]
+    fn test_method_on_builtin_type() {
+        // This tests if we can add methods to builtin types
+        // For now, this should fail gracefully
+        let (result, _) = run_vryn(r#"
+            impl int {
+                fun double(self) -> int {
+                    return self * 2
+                }
+            }
+        "#);
+        // Should parse but not be fully functional yet
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_self_in_condition() {
+        let (result, output) = run_vryn(r#"
+            struct Container {
+                value: int,
+            }
+
+            impl Container {
+                fun is_positive(self) -> bool {
+                    if self.value > 0 {
+                        return true
+                    }
+                    return false
+                }
+            }
+
+            let c = Container { value: 42 }
+            println(c.is_positive())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_multiple_structs_with_methods() {
+        let (result, output) = run_vryn(r#"
+            struct Person {
+                name: str,
+                age: int,
+            }
+
+            struct Dog {
+                name: str,
+            }
+
+            impl Person {
+                fun describe(self) {
+                    println(self.name)
+                }
+            }
+
+            impl Dog {
+                fun bark(self) {
+                    println("Woof")
+                }
+            }
+
+            let p = Person { name: "Alice", age: 30 }
+            let d = Dog { name: "Buddy" }
+            p.describe()
+            d.bark()
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Alice");
+        assert_eq!(output[1], "Woof");
+    }
+
+
 }
