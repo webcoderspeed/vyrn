@@ -21,7 +21,7 @@ use formatter::Formatter;
 use lsp::VrynAnalyzer;
 use wasmgen::WasmCodeGen;
 
-const VERSION: &str = "0.1.0-alpha";
+const VERSION: &str = "0.5.0-alpha";
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -43,6 +43,9 @@ fn main() {
         "repl" => run_repl(),
         "version" | "--version" | "-v" => {
             println!("vryn {}", VERSION);
+            println!("  Built-in functions: 184");
+            println!("  Tests: 411+");
+            println!("  Modules: 12");
         }
         "help" | "--help" | "-h" => print_usage(),
         "check" => {

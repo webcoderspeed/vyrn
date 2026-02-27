@@ -3147,6 +3147,254 @@ impl Interpreter {
         .collect();
     return Ok(Value::Array(zipped));
 }
+"typeof_detailed" => {
+    if args.len() != 1 { return Err("typeof_detailed() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    let detailed_type = match &val {
+        Value::None => "none".to_string(),
+        Value::Bool(_) => "bool".to_string(),
+        Value::Int(_) => "int".to_string(),
+        Value::Float(_) => "float".to_string(),
+        Value::Str(_) => "string".to_string(),
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                "array<unknown>".to_string()
+            } else {
+                let first_type = match &arr[0] {
+                    Value::Int(_) => "int",
+                    Value::Float(_) => "float",
+                    Value::Str(_) => "string",
+                    Value::Bool(_) => "bool",
+                    Value::Array(_) => "array",
+                    Value::Struct { .. } => "struct",
+                    Value::None => "none",
+                    _ => "unknown",
+                };
+                format!("array<{}>", first_type)
+            }
+        }
+        Value::Struct { .. } => "struct".to_string(),
+        _ => "unknown".to_string(),
+    };
+    return Ok(Value::Str(detailed_type));
+}
+
+"is_int" => {
+    if args.len() != 1 { return Err("is_int() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Bool(matches!(val, Value::Int(_))));
+}
+
+"is_float" => {
+    if args.len() != 1 { return Err("is_float() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Bool(matches!(val, Value::Float(_))));
+}
+
+"is_str" => {
+    if args.len() != 1 { return Err("is_str() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Bool(matches!(val, Value::Str(_))));
+}
+
+"is_bool" => {
+    if args.len() != 1 { return Err("is_bool() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Bool(matches!(val, Value::Bool(_))));
+}
+
+"is_array" => {
+    if args.len() != 1 { return Err("is_array() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Bool(matches!(val, Value::Array(_))));
+}
+
+"is_none" => {
+    if args.len() != 1 { return Err("is_none() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Bool(matches!(val, Value::None)));
+}
+
+"clamp" => {
+    if args.len() != 3 { return Err("clamp() takes 3 arguments".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    let min = self.eval_expression(&args[1])?;
+    let max = self.eval_expression(&args[2])?;
+    let val_num = match val {
+        Value::Int(n) => n as f64,
+        Value::Float(f) => f,
+        _ => return Err("clamp() expects numeric values".to_string()),
+    };
+    let min_num = match min {
+        Value::Int(n) => n as f64,
+        Value::Float(f) => f,
+        _ => return Err("clamp() expects numeric values".to_string()),
+    };
+    let max_num = match max {
+        Value::Int(n) => n as f64,
+        Value::Float(f) => f,
+        _ => return Err("clamp() expects numeric values".to_string()),
+    };
+    let clamped = if val_num < min_num {
+        min_num
+    } else if val_num > max_num {
+        max_num
+    } else {
+        val_num
+    };
+    if matches!(val, Value::Int(_)) {
+        return Ok(Value::Int(clamped as i64));
+    } else {
+        return Ok(Value::Float(clamped));
+    }
+}
+
+"lerp" => {
+    if args.len() != 3 { return Err("lerp() takes 3 arguments".to_string()); }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    let t = self.eval_expression(&args[2])?;
+    let a_num = match a {
+        Value::Int(n) => n as f64,
+        Value::Float(f) => f,
+        _ => return Err("lerp() expects numeric values".to_string()),
+    };
+    let b_num = match b {
+        Value::Int(n) => n as f64,
+        Value::Float(f) => f,
+        _ => return Err("lerp() expects numeric values".to_string()),
+    };
+    let t_num = match t {
+        Value::Int(n) => n as f64,
+        Value::Float(f) => f,
+        _ => return Err("lerp() expects numeric values".to_string()),
+    };
+    let result = a_num + (b_num - a_num) * t_num;
+    return Ok(Value::Float(result));
+}
+
+"str_capitalize" => {
+    if args.len() != 1 { return Err("str_capitalize() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? {
+        Value::Str(s) => s,
+        _ => return Err("str_capitalize() expects a string".to_string()),
+    };
+    if s.is_empty() {
+        return Ok(Value::Str(s));
+    }
+    let mut chars = s.chars();
+    let first = chars.next().unwrap().to_uppercase().to_string();
+    let rest: String = chars.collect();
+    return Ok(Value::Str(format!("{}{}", first, rest)));
+}
+
+"str_title" => {
+    if args.len() != 1 { return Err("str_title() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? {
+        Value::Str(s) => s,
+        _ => return Err("str_title() expects a string".to_string()),
+    };
+    let words: Vec<String> = s
+        .split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => {
+                    let capitalized = first.to_uppercase().to_string();
+                    let rest: String = chars.collect();
+                    format!("{}{}", capitalized, rest)
+                }
+            }
+        })
+        .collect();
+    return Ok(Value::Str(words.join(" ")));
+}
+
+"arr_last" => {
+    if args.len() != 1 { return Err("arr_last() takes 1 argument".to_string()); }
+    let arr = match self.eval_expression(&args[0])? {
+        Value::Array(a) => a,
+        _ => return Err("arr_last() expects an array".to_string()),
+    };
+    if arr.is_empty() {
+        return Ok(Value::None);
+    }
+    return Ok(arr[arr.len() - 1].clone());
+}
+
+"arr_first" => {
+    if args.len() != 1 { return Err("arr_first() takes 1 argument".to_string()); }
+    let arr = match self.eval_expression(&args[0])? {
+        Value::Array(a) => a,
+        _ => return Err("arr_first() expects an array".to_string()),
+    };
+    if arr.is_empty() {
+        return Ok(Value::None);
+    }
+    return Ok(arr[0].clone());
+}
+
+"arr_compact" => {
+    if args.len() != 1 { return Err("arr_compact() takes 1 argument".to_string()); }
+    let arr = match self.eval_expression(&args[0])? {
+        Value::Array(a) => a,
+        _ => return Err("arr_compact() expects an array".to_string()),
+    };
+    let compacted: Vec<Value> = arr
+        .into_iter()
+        .filter(|v| !matches!(v, Value::None))
+        .collect();
+    return Ok(Value::Array(compacted));
+}
+
+"arr_count" => {
+    if args.len() != 2 { return Err("arr_count() takes 2 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? {
+        Value::Array(a) => a,
+        _ => return Err("arr_count() expects an array".to_string()),
+    };
+    let search_val = self.eval_expression(&args[1])?;
+    let count: i64 = arr
+        .iter()
+        .filter(|v| {
+            match (v, &search_val) {
+                (Value::Int(a), Value::Int(b)) => a == b,
+                (Value::Float(a), Value::Float(b)) => a == b,
+                (Value::Str(a), Value::Str(b)) => a == b,
+                (Value::Bool(a), Value::Bool(b)) => a == b,
+                (Value::None, Value::None) => true,
+                _ => false,
+            }
+        })
+        .count() as i64;
+    return Ok(Value::Int(count));
+}
+
+"time_ms" => {
+    if args.len() != 0 { return Err("time_ms() takes 0 arguments".to_string()); }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
+    return Ok(Value::Int(duration.as_millis() as i64));
+}
+
+"exit" => {
+    if args.len() > 1 { return Err("exit() takes 0 or 1 argument".to_string()); }
+    let code = if args.is_empty() {
+        0
+    } else {
+        match self.eval_expression(&args[0])? {
+            Value::Int(n) => n as i32,
+            _ => return Err("exit() expects an integer".to_string()),
+        }
+    };
+    std::process::exit(code);
+}
+
+
+
 
                         _ => {}
                     }
@@ -7580,5 +7828,140 @@ line3"
         assert!(result.is_ok());
         assert_eq!(output[0], "[[1, a], [2, b], [3, c]]");
     }
+
+    #[test]
+    fn test_typeof_detailed() {
+        let (result, output) = run_vryn(r#"
+            println(typeof_detailed(42))
+            println(typeof_detailed([1, 2, 3]))
+            println(typeof_detailed(["a", "b"]))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "int");
+        assert_eq!(output[1], "array<int>");
+        assert_eq!(output[2], "array<string>");
+    }
+
+    #[test]
+    fn test_type_checking_predicates() {
+        let (result, output) = run_vryn(r#"
+            println(is_int(42))
+            println(is_int(3.14))
+            println(is_float(3.14))
+            println(is_str("hello"))
+            println(is_bool(true))
+            println(is_array([1, 2, 3]))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+        assert_eq!(output[2], "true");
+        assert_eq!(output[3], "true");
+        assert_eq!(output[4], "true");
+        assert_eq!(output[5], "true");
+    }
+
+    #[test]
+    fn test_clamp() {
+        let (result, output) = run_vryn(r#"
+            println(clamp(5, 0, 10))
+            println(clamp(-5, 0, 10))
+            println(clamp(15, 0, 10))
+            println(clamp(5.5, 0.0, 10.0))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "0");
+        assert_eq!(output[2], "10");
+        assert!(output[3].contains("5.5") || output[3].starts_with("5"));
+    }
+
+    #[test]
+    fn test_lerp() {
+        let (result, output) = run_vryn(r#"
+            println(lerp(0, 10, 0.5))
+            println(lerp(0, 100, 0.25))
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("5"));
+        assert!(output[1].contains("25"));
+    }
+
+    #[test]
+    fn test_str_capitalize() {
+        let (result, output) = run_vryn(r#"
+            println(str_capitalize("hello"))
+            println(str_capitalize("WORLD"))
+            println(str_capitalize(""))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Hello");
+        assert_eq!(output[1], "WORLD");
+        assert_eq!(output[2], "");
+    }
+
+    #[test]
+    fn test_str_title() {
+        let (result, output) = run_vryn(r#"
+            println(str_title("hello world"))
+            println(str_title("foo bar baz"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Hello World");
+        assert_eq!(output[1], "Foo Bar Baz");
+    }
+
+    #[test]
+    fn test_arr_first_and_last() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            println(arr_first(arr))
+            println(arr_last(arr))
+            println(arr_first([]))
+            println(arr_last([]))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+        assert_eq!(output[1], "5");
+        assert_eq!(output[2], "None");
+        assert_eq!(output[3], "None");
+    }
+
+    #[test]
+    fn test_arr_compact() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            let compacted = arr_compact(arr)
+            println(compacted)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[1, 2, 3]");
+    }
+
+    #[test]
+    fn test_arr_count() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 2, 3, 2, 4]
+            println(arr_count(arr, 2))
+            println(arr_count(arr, 5))
+            println(arr_count(arr, 1))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "0");
+        assert_eq!(output[2], "1");
+    }
+
+    #[test]
+    fn test_time_ms() {
+        let (result, output) = run_vryn(r#"
+            let t = time_ms()
+            println(t > 0)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+
 
 }
