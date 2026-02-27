@@ -1216,6 +1216,177 @@ impl Interpreter {
     let json_str = self.value_to_json(&val, true);
     return Ok(Value::Str(json_str));
 }
+// ============ PHASE 25: FFI Foundation ============
+"exec" => {
+    if args.len() != 1 {
+        return Err("exec() takes exactly 1 argument".to_string());
+    }
+    let cmd = self.eval_expression(&args[0])?;
+    return match cmd {
+        Value::Str(c) => {
+            match std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&c)
+                .output() {
+                Ok(output) => {
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    Ok(Value::Str(stdout))
+                }
+                Err(e) => Err(format!("Failed to execute command: {}", e)),
+            }
+        }
+        _ => Err("exec() requires a string command".to_string()),
+    };
+}
+"exec_status" => {
+    if args.len() != 1 {
+        return Err("exec_status() takes exactly 1 argument".to_string());
+    }
+    let cmd = self.eval_expression(&args[0])?;
+    return match cmd {
+        Value::Str(c) => {
+            match std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&c)
+                .status() {
+                Ok(status) => {
+                    let code = status.code().unwrap_or(-1) as i64;
+                    Ok(Value::Int(code))
+                }
+                Err(e) => Err(format!("Failed to execute command: {}", e)),
+            }
+        }
+        _ => Err("exec_status() requires a string command".to_string()),
+    };
+}
+"env_get" => {
+    if args.len() != 1 {
+        return Err("env_get() takes exactly 1 argument".to_string());
+    }
+    let name = self.eval_expression(&args[0])?;
+    return match name {
+        Value::Str(n) => {
+            match std::env::var(&n) {
+                Ok(val) => Ok(Value::Str(val)),
+                Err(_) => Ok(Value::Str(String::new())),
+            }
+        }
+        _ => Err("env_get() requires a string name".to_string()),
+    };
+}
+"env_set" => {
+    if args.len() != 2 {
+        return Err("env_set() takes exactly 2 arguments".to_string());
+    }
+    let name = self.eval_expression(&args[0])?;
+    let value = self.eval_expression(&args[1])?;
+    return match (name, value) {
+        (Value::Str(n), v) => {
+            std::env::set_var(&n, format!("{}", v));
+            Ok(Value::None)
+        }
+        _ => Err("env_set() requires string arguments".to_string()),
+    };
+}
+"env_args" => {
+    if !args.is_empty() {
+        return Err("env_args() takes no arguments".to_string());
+    }
+    let args_vec: Vec<Value> = std::env::args()
+        .map(|arg| Value::Str(arg))
+        .collect();
+    return Ok(Value::Array(args_vec));
+}
+// ============ PHASE 28: Debugging & Profiling Foundation ============
+"debug" => {
+    if args.len() != 1 {
+        return Err("debug() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    let type_name = match &val {
+        Value::Int(_) => "Int",
+        Value::Float(_) => "Float",
+        Value::Str(_) => "Str",
+        Value::Bool(_) => "Bool",
+        Value::Array(_) => "Array",
+        Value::None => "None",
+        Value::Function { .. } => "Fn",
+        Value::Struct { .. } => "Struct",
+        Value::EnumType { .. } => "EnumType",
+        Value::Variant { .. } => "Variant",
+        Value::Result { .. } => "Result",
+        Value::Future { .. } => "Future",
+        Value::Channel { .. } => "Channel",
+        Value::TaskHandle { .. } => "TaskHandle",
+    };
+    let output = format!("[debug] {}({})", type_name, val);
+    println!("{}", output);
+    self.output.push(output);
+    return Ok(Value::None);
+}
+"dbg" => {
+    if args.len() != 1 {
+        return Err("dbg() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    let type_name = match &val {
+        Value::Int(_) => "Int",
+        Value::Float(_) => "Float",
+        Value::Str(_) => "Str",
+        Value::Bool(_) => "Bool",
+        Value::Array(_) => "Array",
+        Value::None => "None",
+        Value::Function { .. } => "Fn",
+        Value::Struct { .. } => "Struct",
+        Value::EnumType { .. } => "EnumType",
+        Value::Variant { .. } => "Variant",
+        Value::Result { .. } => "Result",
+        Value::Future { .. } => "Future",
+        Value::Channel { .. } => "Channel",
+        Value::TaskHandle { .. } => "TaskHandle",
+    };
+    let output = format!("[debug] {}({})", type_name, val);
+    println!("{}", output);
+    self.output.push(output);
+    return Ok(val);
+}
+"trace" => {
+    if args.len() != 1 {
+        return Err("trace() takes exactly 1 argument".to_string());
+    }
+    let msg = self.eval_expression(&args[0])?;
+    let msg_str = format!("{}", msg);
+    let output = format!("[TRACE] {}", msg_str);
+    println!("{}", output);
+    self.output.push(output);
+    return Ok(Value::None);
+}
+"time_now" => {
+    if !args.is_empty() {
+        return Err("time_now() takes no arguments".to_string());
+    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+    return Ok(Value::Int(millis));
+}
+"sleep_ms" => {
+    if args.len() != 1 {
+        return Err("sleep_ms() takes exactly 1 argument".to_string());
+    }
+    let ms_val = self.eval_expression(&args[0])?;
+    return match ms_val {
+        Value::Int(ms) => {
+            use std::time::Duration;
+            std::thread::sleep(Duration::from_millis(ms as u64));
+            Ok(Value::None)
+        }
+        _ => Err("sleep_ms() requires an integer".to_string()),
+    };
+}
+
                         _ => {}
                     }
                 }
@@ -4373,5 +4544,141 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(output[0], "42");
     }
+
+
+    // ============ PHASE 25: FFI Tests ============
+    #[test]
+    fn test_exec_basic() {
+        let (result, output) = run_vryn(r#"
+            let result = exec("echo hello")
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        // The output includes "hello\n", so check that it starts with hello
+        assert!(output[0].contains("hello"));
+    }
+
+    #[test]
+    fn test_exec_status_success() {
+        let (result, output) = run_vryn(r#"
+            let status = exec_status("exit 0")
+            println(status)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_exec_status_failure() {
+        let (result, output) = run_vryn(r#"
+            let status = exec_status("exit 42")
+            println(status)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_env_set_and_get() {
+        let (result, output) = run_vryn(r#"
+            env_set("TEST_VAR", "test_value")
+            let val = env_get("TEST_VAR")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "test_value");
+    }
+
+    #[test]
+    fn test_env_get_nonexistent() {
+        let (result, output) = run_vryn(r#"
+            let val = env_get("NONEXISTENT_VAR_XYZ")
+            let len = len(val)
+            println(len)
+        "#);
+        assert!(result.is_ok());
+        // Empty string should have length 0
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_env_args_exists() {
+        let (result, output) = run_vryn(r#"
+            let args = env_args()
+            let is_arr = type_of(args)
+            println(is_arr)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "array");
+    }
+
+    // ============ PHASE 28: Debug Tests ============
+    #[test]
+    fn test_debug_int() {
+        let (result, output) = run_vryn(r#"
+            debug(42)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("[debug]"));
+        assert!(output[0].contains("Int"));
+        assert!(output[0].contains("42"));
+    }
+
+    #[test]
+    fn test_dbg_returns_value() {
+        let (result, output) = run_vryn(r#"
+            let x = dbg(100)
+            println(x)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("[debug]"));
+        assert_eq!(output[1], "100");
+    }
+
+    #[test]
+    fn test_debug_string() {
+        let (result, output) = run_vryn(r#"
+            debug("hello")
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("[debug]"));
+        assert!(output[0].contains("Str"));
+    }
+
+    #[test]
+    fn test_trace_message() {
+        let (result, output) = run_vryn(r#"
+            trace("execution checkpoint")
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("[TRACE]"));
+        assert!(output[0].contains("execution checkpoint"));
+    }
+
+    #[test]
+    fn test_time_now_returns_int() {
+        let (result, output) = run_vryn(r#"
+            let t = time_now()
+            let is_int = type_of(t)
+            println(is_int)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "i64");
+    }
+
+    #[test]
+    fn test_sleep_ms_executes() {
+        let (result, output) = run_vryn(r#"
+            let t1 = time_now()
+            sleep_ms(10)
+            let t2 = time_now()
+            let elapsed = t2 - t1
+            println(elapsed >= 10)
+        "#);
+        assert!(result.is_ok());
+        // Should be true since we slept for 10ms
+        assert_eq!(output[0], "true");
+    }
+
 
 }

@@ -6,6 +6,7 @@ mod formatter;
 mod package;
 mod ccodegen;
 mod docgen;
+mod lsp;
 
 use std::env;
 use std::fs;
@@ -16,6 +17,7 @@ use parser::Parser;
 use codegen::Interpreter;
 use typechecker::TypeChecker;
 use formatter::Formatter;
+use lsp::VrynAnalyzer;
 
 const VERSION: &str = "0.1.0-alpha";
 
@@ -61,6 +63,13 @@ fn main() {
                 std::process::exit(1);
             }
             show_ast(&args[2]);
+        }
+        "analyze" => {
+            if args.len() < 3 {
+                eprintln!("Usage: vryn analyze <file.vn>");
+                std::process::exit(1);
+            }
+            analyze_file(&args[2]);
         }
         "new" => {
             if args.len() < 3 {
@@ -133,8 +142,9 @@ fn print_usage() {
     help              Show this help message
 
   DEBUG:
-    tokens <file.vn>  Show lexer output (tokens)
-    ast <file.vn>     Show parser output (AST)
+    tokens <file.vn>   Show lexer output (tokens)
+    ast <file.vn>      Show parser output (AST)
+    analyze <file.vn>  Analyze code and show diagnostics/symbols
 
   EXAMPLES:
     vryn run hello.vn
@@ -663,4 +673,60 @@ fn generate_docs(filepath: &str) {
             std::process::exit(1);
         }
     }
+}
+
+fn analyze_file(filepath: &str) {
+    let content = match fs::read_to_string(filepath) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31merror:\x1b[0m Could not read file '{}': {}", filepath, e);
+            std::process::exit(1);
+        }
+    };
+
+    let result = VrynAnalyzer::analyze(&content);
+
+    // Print diagnostics
+    if !result.diagnostics.is_empty() {
+        println!("\x1b[33mDiagnostics:\x1b[0m");
+        for diag in &result.diagnostics {
+            let color = match diag.severity {
+                lsp::DiagnosticSeverity::Error => "\x1b[31m",
+                lsp::DiagnosticSeverity::Warning => "\x1b[33m",
+                lsp::DiagnosticSeverity::Info => "\x1b[36m",
+            };
+            let reset = "\x1b[0m";
+            println!(
+                "  {}{}{}:{}: {} - {}",
+                color,
+                diag.severity,
+                reset,
+                diag.line,
+                diag.column,
+                diag.message
+            );
+        }
+    } else {
+        println!("\x1b[32m✓ No diagnostics\x1b[0m");
+    }
+
+    println!();
+
+    // Print symbols
+    if !result.symbols.is_empty() {
+        println!("\x1b[33mSymbols:\x1b[0m");
+        for symbol in &result.symbols {
+            let kind_str = symbol.kind.to_string();
+            if let Some(type_info) = &symbol.type_info {
+                println!("  {} {} : {} (line {})", kind_str, symbol.name, type_info, symbol.line);
+            } else {
+                println!("  {} {} (line {})", kind_str, symbol.name, symbol.line);
+            }
+        }
+    } else if result.success {
+        println!("\x1b[33mSymbols:\x1b[0m No symbols found");
+    }
+
+    println!();
+    println!("\x1b[33mAnalysis Result:\x1b[0m {}", if result.success { "Success" } else { "Failed" });
 }
