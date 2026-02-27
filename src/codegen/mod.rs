@@ -1550,6 +1550,228 @@ impl Interpreter {
         _ => Err("url_decode() requires a string".to_string()),
     };
 }
+// ============ PHASE 32: Security & Hashing Foundation ============
+"hash_simple" => {
+    if args.len() != 1 {
+        return Err("hash_simple() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Str(s) => {
+            // DJB2 hash algorithm
+            let mut hash: u64 = 5381;
+            for byte in s.bytes() {
+                hash = ((hash << 5).wrapping_add(hash)).wrapping_add(byte as u64);
+            }
+            Ok(Value::Int(hash as i64))
+        }
+        _ => Err("hash_simple() requires a string".to_string()),
+    };
+}
+"random_int" => {
+    if args.len() != 2 {
+        return Err("random_int() takes exactly 2 arguments (min, max)".to_string());
+    }
+    let min_val = self.eval_expression(&args[0])?;
+    let max_val = self.eval_expression(&args[1])?;
+    return match (min_val, max_val) {
+        (Value::Int(min), Value::Int(max)) => {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos() as i64;
+            let range = max - min + 1;
+            let result = min + (nanos.abs() % range);
+            Ok(Value::Int(result))
+        }
+        _ => Err("random_int() requires two integers".to_string()),
+    };
+}
+"random_float" => {
+    if !args.is_empty() {
+        return Err("random_float() takes no arguments".to_string());
+    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    let float_val = (nanos as f64) / 1_000_000_000.0;
+    // Ensure it's between 0.0 and 1.0 by taking fractional part
+    let result = float_val - float_val.floor();
+    return Ok(Value::Float(result));
+}
+"base64_encode" => {
+    if args.len() != 1 {
+        return Err("base64_encode() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Str(s) => {
+            const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let bytes = s.as_bytes();
+            let mut result = String::new();
+            
+            for chunk in bytes.chunks(3) {
+                let b1 = chunk[0];
+                let b2 = chunk.get(1).copied().unwrap_or(0);
+                let b3 = chunk.get(2).copied().unwrap_or(0);
+                
+                let n = ((b1 as u32) << 16) | ((b2 as u32) << 8) | (b3 as u32);
+                
+                result.push(CHARSET[((n >> 18) & 0x3f) as usize] as char);
+                result.push(CHARSET[((n >> 12) & 0x3f) as usize] as char);
+                
+                if chunk.len() > 1 {
+                    result.push(CHARSET[((n >> 6) & 0x3f) as usize] as char);
+                } else {
+                    result.push('=');
+                }
+                
+                if chunk.len() > 2 {
+                    result.push(CHARSET[(n & 0x3f) as usize] as char);
+                } else {
+                    result.push('=');
+                }
+            }
+            
+            Ok(Value::Str(result))
+        }
+        _ => Err("base64_encode() requires a string".to_string()),
+    };
+}
+"base64_decode" => {
+    if args.len() != 1 {
+        return Err("base64_decode() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Str(s) => {
+            let mut decode_table = [255u8; 256];
+            let charset = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            for (i, &c) in charset.iter().enumerate() {
+                decode_table[c as usize] = i as u8;
+            }
+            
+            let bytes = s.as_bytes();
+            let mut result = Vec::new();
+            
+            for chunk in bytes.chunks(4) {
+                if chunk.len() < 2 { break; }
+                
+                let b1 = decode_table[chunk[0] as usize];
+                let b2 = decode_table[chunk[1] as usize];
+                
+                result.push(((b1 << 2) | (b2 >> 4)) as u8);
+                
+                if chunk.len() > 2 && chunk[2] != b'=' {
+                    let b3 = decode_table[chunk[2] as usize];
+                    result.push((((b2 & 0x0f) << 4) | (b3 >> 2)) as u8);
+                    
+                    if chunk.len() > 3 && chunk[3] != b'=' {
+                        let b4 = decode_table[chunk[3] as usize];
+                        result.push((((b3 & 0x03) << 6) | b4) as u8);
+                    }
+                }
+            }
+            
+            match String::from_utf8(result) {
+                Ok(decoded) => Ok(Value::Str(decoded)),
+                Err(_) => Err("base64_decode() produced invalid UTF-8".to_string()),
+            }
+        }
+        _ => Err("base64_decode() requires a string".to_string()),
+    };
+}
+"uuid_v4" => {
+    if !args.is_empty() {
+        return Err("uuid_v4() takes no arguments".to_string());
+    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos();
+    
+    let hex_chars = "0123456789abcdef";
+    let mut uuid = String::new();
+    let mut seed = nanos;
+    
+    for i in 0..36 {
+        if i == 8 || i == 13 || i == 18 || i == 23 {
+            uuid.push('-');
+        } else {
+            seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+            let idx = ((seed >> 16) & 15) as usize;
+            uuid.push(hex_chars.chars().nth(idx).unwrap());
+        }
+    }
+    
+    return Ok(Value::Str(uuid));
+}
+
+// ============ PHASE 34: CI/CD & DevOps Integration ============
+"getpid" => {
+    if !args.is_empty() {
+        return Err("getpid() takes no arguments".to_string());
+    }
+    let pid = std::process::id() as i64;
+    return Ok(Value::Int(pid));
+}
+"hostname" => {
+    if !args.is_empty() {
+        return Err("hostname() takes no arguments".to_string());
+    }
+    return match std::process::Command::new("hostname")
+        .output() {
+        Ok(output) => {
+            let hostname = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .to_string();
+            Ok(Value::Str(hostname))
+        }
+        Err(e) => Err(format!("hostname() failed: {}", e)),
+    };
+}
+"cwd" => {
+    if !args.is_empty() {
+        return Err("cwd() takes no arguments".to_string());
+    }
+    return match std::env::current_dir() {
+        Ok(path) => {
+            Ok(Value::Str(path.to_string_lossy().to_string()))
+        }
+        Err(e) => Err(format!("cwd() failed: {}", e)),
+    };
+}
+"is_file" => {
+    if args.len() != 1 {
+        return Err("is_file() takes exactly 1 argument".to_string());
+    }
+    let path_val = self.eval_expression(&args[0])?;
+    return match path_val {
+        Value::Str(p) => {
+            let is_file = std::path::Path::new(&p).is_file();
+            Ok(Value::Bool(is_file))
+        }
+        _ => Err("is_file() requires a string path".to_string()),
+    };
+}
+"is_dir" => {
+    if args.len() != 1 {
+        return Err("is_dir() takes exactly 1 argument".to_string());
+    }
+    let path_val = self.eval_expression(&args[0])?;
+    return match path_val {
+        Value::Str(p) => {
+            let is_dir = std::path::Path::new(&p).is_dir();
+            Ok(Value::Bool(is_dir))
+        }
+        _ => Err("is_dir() requires a string path".to_string()),
+    };
+}
+
 "html_escape" => {
     if args.len() != 1 {
         return Err("html_escape() takes exactly 1 argument".to_string());
@@ -2061,6 +2283,8 @@ impl Interpreter {
                 BinaryOperator::NotEq => Ok(Value::Bool(a != b)),
                 BinaryOperator::Less => Ok(Value::Bool(a < b)),
                 BinaryOperator::Greater => Ok(Value::Bool(a > b)),
+                BinaryOperator::LessEq => Ok(Value::Bool(a <= b)),
+                BinaryOperator::GreaterEq => Ok(Value::Bool(a >= b)),
                 _ => Err(format!("Cannot apply {:?} to floats", op)),
             },
             // Mixed int/float
@@ -5021,5 +5245,128 @@ mod tests {
         assert!(result.is_ok());
         assert!(output[0].contains("&quot;"));
     }
+
+
+    // ============ PHASE 32: Security & Hashing Tests ============
+    #[test]
+    fn test_hash_simple_string() {
+        let (result, _) = run_vryn(r#"
+            let h = hash_simple("hello")
+            assert_ne(h, 0)
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_hash_simple_consistent() {
+        let (result, _) = run_vryn(r#"
+            let h1 = hash_simple("test")
+            let h2 = hash_simple("test")
+            assert_eq(h1, h2)
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_random_int_range() {
+        let (result, _) = run_vryn(r#"
+            let r = random_int(1, 10)
+            assert(r >= 1)
+            assert(r <= 10)
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_random_float_range() {
+        let (result, _) = run_vryn(r#"
+            let r = random_float()
+            assert(r >= 0.0)
+            assert(r < 1.0)
+        "#);
+        if let Err(e) = &result { println!("Error: {}", e); }
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_base64_encode_basic() {
+        let (result, output) = run_vryn(r#"
+            let encoded = base64_encode("hello")
+            println(encoded)
+        "#);
+        assert!(result.is_ok());
+        assert!(!output.is_empty());
+        assert!(output[0].contains("aGVs") || output[0].contains("aGVsbG8"));
+    }
+
+    #[test]
+    fn test_base64_decode_basic() {
+        let (result, output) = run_vryn(r#"
+            let decoded = base64_decode("aGVsbG8=")
+            println(decoded)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_uuid_v4_format() {
+        let (result, output) = run_vryn(r#"
+            let uuid = uuid_v4()
+            println(uuid)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0].len(), 36);
+        assert!(output[0].contains('-'));
+    }
+
+    // ============ PHASE 34: CI/CD & DevOps Tests ============
+    #[test]
+    fn test_getpid_positive() {
+        let (result, _) = run_vryn(r#"
+            let pid = getpid()
+            assert(pid > 0)
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_hostname_nonempty() {
+        let (result, output) = run_vryn(r#"
+            let hname = hostname()
+            println(hname)
+        "#);
+        assert!(result.is_ok());
+        assert!(!output[0].is_empty());
+    }
+
+    #[test]
+    fn test_cwd_nonempty() {
+        let (result, output) = run_vryn(r#"
+            let current = cwd()
+            println(current)
+        "#);
+        assert!(result.is_ok());
+        assert!(!output[0].is_empty());
+    }
+
+    #[test]
+    fn test_is_file_exists() {
+        let (result, _) = run_vryn(r#"
+            let is_f = is_file("/etc/hostname")
+            assert(is_f)
+        "#);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_is_dir_exists() {
+        let (result, _) = run_vryn(r#"
+            let is_d = is_dir("/tmp")
+            assert(is_d)
+        "#);
+        assert!(result.is_ok());
+    }
+
 
 }
