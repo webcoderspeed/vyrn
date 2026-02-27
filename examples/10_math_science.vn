@@ -1,0 +1,104 @@
+// ============================================
+// Vryn Example: Math, Stats & Scientific Computing
+// ============================================
+
+// --- Basic Math ---
+println("=== Basic Math ===")
+println(fmt("abs(-5) = {}", abs(-5)))
+println(fmt("min(3, 7) = {}", min(3, 7)))
+println(fmt("max(3, 7) = {}", max(3, 7)))
+println(fmt("clamp(15, 0, 10) = {}", clamp(15, 0, 10)))
+
+println(fmt("floor(3.7) = {}", floor(3.7)))
+println(fmt("ceil(3.2) = {}", ceil(3.2)))
+println(fmt("round(3.5) = {}", round(3.5)))
+println(fmt("sqrt(16) = {}", sqrt(16)))
+println(fmt("pow(2, 10) = {}", pow(2, 10)))
+
+// --- Constants ---
+println("=== Constants ===")
+println(fmt("Pi = {}", math_pi()))
+println(fmt("E = {}", math_e()))
+println(fmt("Infinity = {}", math_inf()))
+
+// --- Trigonometry ---
+println("=== Trig ===")
+let pi = math_pi()
+println(fmt("sin(0) = {}", math_sin(0)))
+println(fmt("cos(0) = {}", math_cos(0)))
+println(fmt("tan(0) = {}", math_tan(0)))
+println(fmt("sin(pi/2) = {}", math_sin(pi / 2.0)))
+
+// --- Logarithms ---
+println("=== Logarithms ===")
+println(fmt("log(1) = {}", math_log(1)))
+println(fmt("log(E) = {}", math_log(math_e())))
+println(fmt("log10(100) = {}", math_log10(100)))
+println(fmt("exp(1) = {}", math_exp(1)))
+
+// --- Special checks ---
+println("=== Special ===")
+println(fmt("is_nan(0/0): Uses math_is_nan"))
+println(fmt("is_inf(inf) = {}", math_is_inf(math_inf())))
+
+// --- Linear Interpolation ---
+println("=== Lerp ===")
+println(fmt("lerp(0, 100, 0.5) = {}", lerp(0, 100, 0.5)))
+println(fmt("lerp(0, 100, 0.25) = {}", lerp(0, 100, 0.25)))
+
+// --- Statistics ---
+println("=== Statistics ===")
+let data = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+println(fmt("Sum: {}", stats_sum(data)))
+println(fmt("Mean: {}", stats_mean(data)))
+println(fmt("Median: {}", stats_median(data)))
+println(fmt("Min: {}", stats_min(data)))
+println(fmt("Max: {}", stats_max(data)))
+println(fmt("Range: {}", stats_range(data)))
+println(fmt("Variance: {}", stats_variance(data)))
+println(fmt("StdDev: {}", stats_stddev(data)))
+
+// --- Exam scores ---
+println("=== Exam Analysis ===")
+let scores = [72, 85, 90, 68, 95, 78, 88, 92, 74, 81]
+println(fmt("Class average: {}", stats_mean(scores)))
+println(fmt("Highest score: {}", stats_max(scores)))
+println(fmt("Lowest score: {}", stats_min(scores)))
+println(fmt("Spread: {}", stats_stddev(scores)))
+
+// --- Linear Algebra ---
+println("=== Vectors ===")
+let a = [1, 2, 3]
+let b = [4, 5, 6]
+
+println(fmt("a + b = {}", vec_add(a, b)))
+println(fmt("a - b = {}", vec_sub(a, b)))
+println(fmt("a * b = {}", vec_mul(a, b)))
+println(fmt("dot(a, b) = {}", vec_dot(a, b)))
+println(fmt("scale(a, 3) = {}", vec_scale(a, 3)))
+println(fmt("norm(a) = {}", vec_norm(a)))
+println(fmt("normalize([3,4]) = {}", vec_normalize([3, 4])))
+
+// --- Array Generation ---
+println("=== Generators ===")
+println(fmt("linspace(0, 1, 5) = {}", linspace(0, 1, 5)))
+println(fmt("arange(0, 10, 2) = {}", arange(0, 10, 2)))
+println(fmt("range_arr(1, 6) = {}", range_arr(1, 6)))
+
+// --- Physics example: Projectile ---
+println("=== Projectile Motion ===")
+let g = 9.81
+let v0 = 50.0
+let angle = 45.0
+let rad = angle * math_pi() / 180.0
+
+let vx = v0 * math_cos(rad)
+let vy = v0 * math_sin(rad)
+let t_flight = 2.0 * vy / g
+let range = vx * t_flight
+let max_h = vy * vy / (2.0 * g)
+
+println(fmt("Launch angle: {} deg", angle))
+println(fmt("Flight time: {} s", round(t_flight * 100.0) / 100.0))
+println(fmt("Range: {} m", round(range * 100.0) / 100.0))
+println(fmt("Max height: {} m", round(max_h * 100.0) / 100.0))

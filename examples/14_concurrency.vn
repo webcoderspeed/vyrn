@@ -1,0 +1,58 @@
+// ============================================
+// Vryn Example: Concurrency — Async/Spawn/Timer
+// ============================================
+
+// --- Async function ---
+println("=== Async Functions ===")
+async fun fetch_data(url) {
+    println(fmt("Fetching: {}", url))
+    return fmt("Data from {}", url)
+}
+
+let result = await fetch_data("https://api.vryn.dev")
+println(result)
+
+// --- Spawn tasks ---
+println("=== Spawn ===")
+async fun compute(n) {
+    return n * n
+}
+
+let task1 = spawn compute(5)
+let task2 = spawn compute(10)
+let task3 = spawn compute(15)
+
+println(fmt("Task1: {}", await task1))
+println(fmt("Task2: {}", await task2))
+println(fmt("Task3: {}", await task3))
+
+// --- Parallel tasks simplified ---
+println("=== Parallel Work ===")
+async fun process_item(name, value) {
+    println(fmt("Processing {} = {}", name, value))
+    return value * 2
+}
+
+let t1 = spawn process_item("alpha", 10)
+let t2 = spawn process_item("beta", 20)
+let t3 = spawn process_item("gamma", 30)
+
+let r1 = await t1
+let r2 = await t2
+let r3 = await t3
+
+println(fmt("Result 0: {}", r1))
+println(fmt("Result 1: {}", r2))
+println(fmt("Result 2: {}", r3))
+
+// --- Timer ---
+println("=== Timer ===")
+let start = time_ms()
+// Do some work
+var sum = 0
+for x in range_arr(1, 101) {
+    sum = sum + x
+}
+let elapsed = time_ms() - start
+println(fmt("Sum 1-100 = {}", sum))
+println(fmt("Time: {} ms", elapsed))

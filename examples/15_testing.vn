@@ -1,0 +1,84 @@
+// ============================================
+// Vryn Example: Testing — Assertions & Test Functions
+// ============================================
+
+// --- Basic assertions ---
+println("=== Basic Assert ===")
+assert(true)
+assert(1 + 1 == 2)
+assert(10 > 5)
+println("Basic assertions passed!")
+
+// --- Assert equal ---
+println("=== Assert Equal ===")
+assert_eq(2 + 2, 4)
+assert_eq("hello", "hello")
+assert_eq(len([1, 2, 3]), 3)
+println("Equality assertions passed!")
+
+// --- Assert not equal ---
+println("=== Assert Not Equal ===")
+assert_ne(1, 2)
+assert_ne("hello", "world")
+assert_ne(true, false)
+println("Not-equal assertions passed!")
+
+// --- Test functions (vryn test discovers test_* functions) ---
+fun test_addition() {
+    assert_eq(1 + 1, 2)
+    assert_eq(100 + 200, 300)
+    assert_eq(-5 + 5, 0)
+}
+
+fun test_string_operations() {
+    assert_eq(str_len("hello"), 5)
+    assert_eq(str_upper("hello"), "HELLO")
+    assert_eq(str_lower("WORLD"), "world")
+    assert_eq(str_contains("hello world", "world"), true)
+    assert_eq(str_reverse("abc"), "cba")
+}
+
+fun test_array_operations() {
+    let arr = [1, 2, 3, 4, 5]
+    assert_eq(len(arr), 5)
+    assert_eq(arr[0], 1)
+    assert_eq(arr[4], 5)
+    assert_eq(arr_sum(arr), 15)
+    assert_eq(arr_min(arr), 1)
+    assert_eq(arr_max(arr), 5)
+}
+
+fun test_math() {
+    assert_eq(abs(-10), 10)
+    assert_eq(min(3, 7), 3)
+    assert_eq(max(3, 7), 7)
+    assert_eq(pow(2, 8), 256)
+    assert_eq(clamp(15, 0, 10), 10)
+}
+
+fun test_type_conversions() {
+    assert_eq(to_int("42"), 42)
+    assert_eq(to_str(100), "100")
+    assert_eq(to_bool(1), true)
+    assert_eq(to_bool(0), false)
+    assert_eq(is_int(42), true)
+    assert_eq(is_str("hi"), true)
+}
+
+fun test_error_handling() {
+    let ok_val = Ok(42)
+    let err_val = Err("oops")
+    assert_eq(is_ok(ok_val), true)
+    assert_eq(is_err(err_val), true)
+    assert_eq(unwrap(ok_val), 42)
+    assert_eq(unwrap_or(err_val, 0), 0)
+}
+
+// Run all tests
+test_addition()
+test_string_operations()
+test_array_operations()
+test_math()
+test_type_conversions()
+test_error_handling()
+println("All 6 test suites passed!")

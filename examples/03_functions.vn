@@ -1,0 +1,100 @@
+// ============================================
+// Vryn Example: Functions — fun, recursion, lambdas
+// ============================================
+
+// --- Basic function ---
+println("=== Basic Functions ===")
+fun greet(name) {
+    println("Namaste, " + name + "!")
+}
+greet("Sanjeev")
+greet("Vryn")
+
+// --- Function with return ---
+fun add(a, b) {
+    return a + b
+}
+println(add(10, 20))
+
+// --- Function with type annotations ---
+fun multiply(x: int, y: int) -> int {
+    return x * y
+}
+println(multiply(6, 7))
+
+// --- Multiple return via array ---
+fun min_max(arr) {
+    var lo = arr[0]
+    var hi = arr[0]
+    for x in arr {
+        if x < lo { lo = x }
+        if x > hi { hi = x }
+    }
+    return [lo, hi]
+}
+let result = min_max([5, 2, 8, 1, 9, 3])
+println(fmt("Min: {}, Max: {}", result[0], result[1]))
+
+// --- Recursion ---
+println("=== Recursion ===")
+fun factorial(n) {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+println(fmt("5! = {}", factorial(5)))
+println(fmt("10! = {}", factorial(10)))
+
+// --- Fibonacci ---
+fun fib(n) {
+    if n <= 1 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+println("Fibonacci sequence:")
+for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] {
+    print(fmt("{} ", fib(i)))
+}
+println("")
+
+// --- Higher-order functions ---
+println("=== Higher-Order ===")
+let numbers = [1, 2, 3, 4, 5]
+
+// Map
+let doubled = arr_map(numbers, |x| x * 2)
+println(doubled)
+
+// Filter
+let evens = arr_filter(numbers, |x| x % 2 == 0)
+println(evens)
+
+// Reduce
+let total = arr_reduce(numbers, 0, |acc, x| acc + x)
+println(fmt("Sum: {}", total))
+
+// --- Lambda / Closures ---
+println("=== Lambdas ===")
+let square = |x| x * x
+println(square(5))
+
+let is_positive = |n| n > 0
+println(is_positive(5))
+println(is_positive(-3))
+
+// --- Functions as first-class values ---
+fun apply(f, x) {
+    return f(x)
+}
+println(apply(|x| x * 10, 7))
+
+// --- Default-like pattern ---
+fun say_hello(name) {
+    if name == "" {
+        println("Hello, World!")
+    } else {
+        println("Hello, " + name + "!")
+    }
+}
+say_hello("Krishna")
+say_hello("")

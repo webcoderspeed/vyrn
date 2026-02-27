@@ -1,0 +1,65 @@
+// ============================================
+// Vryn Example: Web, Debug & System Tools
+// ============================================
+
+// --- URL encoding/decoding ---
+println("=== URL ===")
+let url = "hello world & foo=bar"
+let encoded = url_encode(url)
+let decoded = url_decode(encoded)
+println(fmt("Original: {}", url))
+println(fmt("Encoded: {}", encoded))
+println(fmt("Decoded: {}", decoded))
+
+// --- HTML escape ---
+println("=== HTML Escape ===")
+let html = "<script>alert('xss')</script>"
+println(fmt("Escaped: {}", html_escape(html)))
+
+// --- Debug tools ---
+println("=== Debug ===")
+debug("This is a debug message")
+let x = 42
+dbg(x)
+
+// --- Trace ---
+println("=== Trace ===")
+trace("Starting computation...")
+let result = pow(2, 20)
+trace("Done!")
+println(fmt("2^20 = {}", result))
+
+// --- Timing ---
+println("=== Timing ===")
+let t1 = time_now()
+// Some work
+var sum = 0
+for i in range_arr(1, 10001) {
+    sum = sum + i
+}
+let t2 = time_now()
+println(fmt("Sum 1..10000 = {}", sum))
+println(fmt("Time: {} ms", t2 - t1))
+
+// --- Environment ---
+println("=== Environment ===")
+env_set("VRYN_MODE", "production")
+println(fmt("VRYN_MODE = {}", env_get("VRYN_MODE")))
+
+// --- Process info ---
+println("=== Process ===")
+println(fmt("PID: {}", getpid()))
+println(fmt("CWD: {}", cwd()))
+
+// --- Type inspection ---
+println("=== Type Inspection ===")
+println(typeof_detailed(42))
+println(typeof_detailed(3.14))
+println(typeof_detailed("hello"))
+println(typeof_detailed([1, 2, 3]))
+println(typeof_detailed(true))
+println(typeof_detailed(none()))
+
+// --- Time helper ---
+println("=== Time ===")
+println(fmt("Current time (ms): {}", time_ms()))

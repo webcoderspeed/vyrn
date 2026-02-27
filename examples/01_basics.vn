@@ -1,0 +1,96 @@
+// ============================================
+// Vryn Example: Basics — Variables, Types & Operators
+// ============================================
+
+// --- Variables with 'var' (mutable) ---
+var name = "Sanjeev"
+var age = 25
+var score = 99.5
+var active = true
+
+println("=== Variables ===")
+println(name)
+println(age)
+println(score)
+println(active)
+
+// Reassignment (var is mutable)
+age = 26
+println(age)
+
+// --- Variables with 'let' (immutable by default) ---
+let pi = 3.14159
+let greeting = "Namaste"
+println(greeting)
+println(pi)
+
+// --- Constants with 'const' ---
+const MAX_USERS = 1000
+const APP_NAME = "Vryn"
+println(MAX_USERS)
+println(APP_NAME)
+
+// --- Type annotations (optional) ---
+let x: int = 42
+let y: float = 3.14
+let z: str = "hello"
+let w: bool = false
+println(x)
+println(y)
+println(z)
+println(w)
+
+// --- Arithmetic operators ---
+println("=== Arithmetic ===")
+println(10 + 3)
+println(10 - 3)
+println(10 * 3)
+println(10 / 3)
+println(10 % 3)
+
+// --- Comparison operators ---
+println("=== Comparisons ===")
+println(5 > 3)
+println(5 < 3)
+println(5 >= 5)
+println(5 <= 4)
+println(5 == 5)
+println(5 != 3)
+
+// --- Logical operators ---
+println("=== Logic ===")
+println(true && false)
+println(true || false)
+println(!true)
+
+// --- String concatenation ---
+println("=== Strings ===")
+let first = "Radha"
+let last = "Krishna"
+println(first + " " + last)
+
+// --- Type checking ---
+println("=== Types ===")
+println(type_of(42))
+println(type_of(3.14))
+println(type_of("hello"))
+println(type_of(true))
+println(type_of([1, 2, 3]))
+
+// --- Type conversion ---
+println("=== Conversions ===")
+println(to_int("42"))
+println(to_float("3.14"))
+println(to_str(100))
+println(to_bool(1))
+println(to_bool(0))
+println(to_bool(""))
+
+// --- Type predicates ---
+println("=== Type Checks ===")
+println(is_int(42))
+println(is_float(3.14))
+println(is_str("hi"))
+println(is_bool(true))
+println(is_array([1]))
+println(is_none(none()))

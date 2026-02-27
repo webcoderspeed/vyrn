@@ -1,0 +1,70 @@
+// ============================================
+// Vryn Example: Maps — Using Struct as Key-Value Storage
+// ============================================
+
+// --- Use struct as a map ---
+println("=== Struct-based Map ===")
+struct Person {
+    name: str,
+    age: int,
+    city: str,
+}
+
+let person = Person { name: "Krishna", age: 5000, city: "Vrindavan" }
+println(person.name)
+println(person.age)
+println(person.city)
+
+// --- Multiple entries using array of structs ---
+println("=== Array of Persons ===")
+struct Employee {
+    id: int,
+    name: str,
+    salary: int,
+}
+
+let emp1 = Employee { id: 1, name: "Alice", salary: 75000 }
+let emp2 = Employee { id: 2, name: "Bob", salary: 68000 }
+let emp3 = Employee { id: 3, name: "Charlie", salary: 82000 }
+
+let employees = [emp1, emp2, emp3]
+
+println("=== Employee Listing ===")
+for emp in employees {
+    println(emp.id)
+    println(emp.name)
+    println(emp.salary)
+}
+
+// --- Filtering and computing with arrays ---
+println("=== Salary Analysis ===")
+let salaries = [emp1.salary, emp2.salary, emp3.salary]
+let total_salary = arr_sum(salaries)
+let avg_salary = total_salary / 3
+let highest = arr_max(salaries)
+
+println("Total:")
+println(total_salary)
+println("Average:")
+println(avg_salary)
+println("Highest:")
+println(highest)
+
+// --- Manual filtering ---
+println("=== High earners ===")
+for emp in employees {
+    if emp.salary > 70000 {
+        println(emp.name)
+        println(emp.salary)
+    }
+}
+
+// --- Count occurrences ---
+println("=== Word Frequency ===")
+let words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
+let unique_words = ["apple", "banana", "cherry"]
+for word in unique_words {
+    let count = arr_count(words, word)
+    println(word)
+    println(count)
+}

@@ -1,0 +1,111 @@
+// ============================================
+// Vryn Example: Error Handling — Result, Try/Catch
+// ============================================
+
+// --- Ok / Err ---
+println("=== Result Type ===")
+fun divide(a, b) {
+    if b == 0 {
+        return Err("Division by zero!")
+    }
+    return Ok(a / b)
+}
+
+let r1 = divide(10, 2)
+let r2 = divide(10, 0)
+
+println(r1)
+println(r2)
+println(is_ok(r1))
+println(is_err(r2))
+
+// --- Unwrap ---
+println("=== Unwrap ===")
+println(unwrap(Ok(42)))
+println(unwrap_or(Err("oops"), 0))
+println(unwrap_or(Ok(99), 0))
+
+// --- Try-Catch ---
+println("=== Try/Catch ===")
+try {
+    let result = divide(100, 0)
+    if is_err(result) {
+        panic(unwrap(result))
+    }
+    println("This won't print")
+} catch e {
+    println(fmt("Caught error: {}", e))
+}
+
+// --- Safe division function ---
+println("=== Safe Division ===")
+fun safe_divide(a, b) {
+    let result = divide(a, b)
+    if is_ok(result) {
+        return unwrap(result)
+    }
+    return 0
+}
+println(safe_divide(10, 3))
+println(safe_divide(10, 0))
+
+// --- Chained error handling ---
+println("=== Error Chain ===")
+fun parse_number(s) {
+    let n = parse_int(s)
+    if n == 0 {
+        if s != "0" {
+            return Err(fmt("Cannot parse '{}' as number", s))
+        }
+    }
+    return Ok(n)
+}
+
+fun validate_age(s) {
+    let result = parse_number(s)
+    if is_err(result) {
+        return result
+    }
+    let age = unwrap(result)
+    if age < 0 {
+        return Err("Age cannot be negative")
+    }
+    if age > 150 {
+        return Err("Age too large")
+    }
+    return Ok(age)
+}
+
+println(validate_age("25"))
+println(validate_age("-5"))
+println(validate_age("200"))
+
+// --- Assert ---
+println("=== Assertions ===")
+assert(1 + 1 == 2)
+assert_eq(2 * 3, 6)
+assert_ne(5, 10)
+println("All assertions passed!")
+
+// --- Error recovery pattern ---
+println("=== Recovery ===")
+fun fetch_data(source) {
+    if source == "db" {
+        return Ok("data from database")
+    }
+    if source == "cache" {
+        return Ok("data from cache")
+    }
+    return Err("Source not found: " + source)
+}
+
+// Try cache first, fallback to db
+var data = fetch_data("cache")
+if is_err(data) {
+    data = fetch_data("db")
+}
+if is_ok(data) {
+    println(unwrap(data))
+} else {
+    println("All sources failed")
+}

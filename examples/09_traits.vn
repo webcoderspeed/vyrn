@@ -1,0 +1,111 @@
+// ============================================
+// Vryn Example: Traits & Impl — Polymorphism
+// ============================================
+
+// --- Define a trait ---
+println("=== Trait: Printable ===")
+trait Printable {
+    fun display(self)
+}
+
+// --- Structs implementing the trait ---
+struct Dog {
+    name: str,
+    breed: str,
+}
+
+impl Dog {
+    fun display(self) {
+        println(fmt("Dog: {} ({})", self.name, self.breed))
+    }
+
+    fun bark(self) {
+        println(fmt("{} says: Woof!", self.name))
+    }
+}
+
+struct Cat {
+    name: str,
+    color: str,
+}
+
+impl Cat {
+    fun display(self) {
+        println(fmt("Cat: {} ({})", self.name, self.color))
+    }
+
+    fun meow(self) {
+        println(fmt("{} says: Meow!", self.name))
+    }
+}
+
+let dog = Dog { name: "Bruno", breed: "Labrador" }
+let cat = Cat { name: "Whiskers", color: "Orange" }
+
+dog.display()
+dog.bark()
+cat.display()
+cat.meow()
+
+// --- Mathematical functions ---
+println("=== Measurable ===")
+
+struct Square {
+    side: float,
+}
+
+fun square_area(s) {
+    return s.side * s.side
+}
+
+fun square_perimeter(s) {
+    return 4.0 * s.side
+}
+
+struct Triangle {
+    base: float,
+    height: float,
+    side_a: float,
+    side_b: float,
+    side_c: float,
+}
+
+fun triangle_area(t) {
+    return 0.5 * t.base * t.height
+}
+
+fun triangle_perimeter(t) {
+    return t.side_a + t.side_b + t.side_c
+}
+
+let sq = Square { side: 5.0 }
+println(fmt("Square(side={})", sq.side))
+println(fmt("  Area: {}", square_area(sq)))
+
+let tri = Triangle { base: 6.0, height: 4.0, side_a: 5.0, side_b: 5.0, side_c: 6.0 }
+println(fmt("Triangle(base={}, height={})", tri.base, tri.height))
+println(fmt("  Area: {}", triangle_area(tri)))
+
+// --- Builder pattern ---
+println("=== Config ===")
+struct Config {
+    host: str,
+    port: int,
+    debug: bool,
+}
+
+fun default_config() {
+    return Config { host: "localhost", port: 8080, debug: false }
+}
+
+let config = default_config()
+println(fmt("Config {{ host: {}, port: {}, debug: {} }}", config.host, config.port, config.debug))
+
+// --- Counter ---
+println("=== Counter ===")
+struct Counter {
+    value: int,
+}
+
+let counter = Counter { value: 42 }
+println(fmt("Counter: {}", counter.value))

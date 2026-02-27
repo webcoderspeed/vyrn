@@ -1,0 +1,53 @@
+// ============================================
+// Vryn Example: Security — Hash, Random, Base64
+// ============================================
+
+// --- Hashing ---
+println("=== Hashing ===")
+let hash1 = hash_simple("hello")
+let hash2 = hash_simple("hello")
+let hash3 = hash_simple("world")
+
+println(fmt("hash('hello') = {}", hash1))
+println(fmt("Same input = same hash? {}", hash1 == hash2))
+println(fmt("Diff input = diff hash? {}", hash1 != hash3))
+
+// Password verification pattern
+fun verify_password(input, stored_hash) {
+    return hash_simple(input) == stored_hash
+}
+
+let password_hash = hash_simple("mySecretPass123")
+println(fmt("Correct password? {}", verify_password("mySecretPass123", password_hash)))
+println(fmt("Wrong password? {}", verify_password("wrongPass", password_hash)))
+
+// --- Random numbers ---
+println("=== Random ===")
+println(fmt("Random int (1-100): {}", random_int(1, 100)))
+println(fmt("Random int (1-6): {}", random_int(1, 6)))
+println(fmt("Random float (0-1): {}", random_float()))
+
+// Dice roll simulation
+println("=== Dice Rolls ===")
+for i in [1, 2, 3, 4, 5] {
+    println(fmt("Roll {}: {}", i, random_int(1, 6)))
+}
+
+// --- Base64 ---
+println("=== Base64 ===")
+let original = "Hello, Vryn!"
+let encoded = base64_encode(original)
+let decoded = base64_decode(encoded)
+
+println(fmt("Original: {}", original))
+println(fmt("Encoded: {}", encoded))
+println(fmt("Decoded: {}", decoded))
+println(fmt("Round-trip OK? {}", original == decoded))
+
+// --- Practical: Token generator ---
+println("=== Token Generator ===")
+fun generate_token() {
+    let raw = to_str(random_int(1000000, 9999999))
+    return base64_encode(raw)
+}
+println(fmt("Auth token: {}", generate_token()))

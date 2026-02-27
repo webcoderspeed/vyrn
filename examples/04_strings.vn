@@ -1,0 +1,84 @@
+// ============================================
+// Vryn Example: Strings — All String Built-ins
+// ============================================
+
+println("=== String Basics ===")
+let s = "Hello, Vrindavan!"
+println(s)
+println(str_len(s))
+
+// --- Case conversion ---
+println("=== Case ===")
+println(str_upper("namaste"))
+println(str_lower("KRISHNA"))
+println(str_capitalize("vryn language"))
+println(str_title("hello world from vryn"))
+
+// --- Search & Check ---
+println("=== Search ===")
+println(str_contains("Radha Krishna", "Krishna"))
+println(str_starts_with("Vryn is great", "Vryn"))
+println(str_ends_with("hello.vn", ".vn"))
+println(str_index_of("abcdef", "cd"))
+println(str_count("banana", "a"))
+
+// --- Trimming ---
+println("=== Trim ===")
+println(str_trim("  hello  "))
+println(str_trim("***vryn***"))
+
+// --- Split & Join ---
+println("=== Split & Join ===")
+let parts = str_split("a,b,c,d", ",")
+println(parts)
+println(str_join(parts, " | "))
+
+let lines = str_lines("line1\nline2\nline3")
+println(lines)
+
+// --- Replace ---
+println("=== Replace ===")
+println(str_replace("Hello World", "World", "Vryn"))
+
+// --- Substring ---
+println("=== Substring ===")
+println(substr("Hello World", 0, 5))
+println(substr("Vrindavan", 0, 4))
+
+// --- Characters ---
+println("=== Characters ===")
+let chars = str_chars("Vryn")
+println(chars)
+
+// --- Reverse ---
+println("=== Reverse ===")
+println(str_reverse("Vryn"))
+println(str_reverse("madam"))
+
+// --- Repeat & Pad ---
+println("=== Repeat & Pad ===")
+println(str_repeat("ha", 3))
+println(str_pad_left("42", 6, "0"))
+println(str_pad_right("hi", 10, "."))
+
+// --- Utility checks ---
+println("=== Utility ===")
+println(str_is_empty(""))
+println(str_is_empty("hello"))
+println(str_is_numeric("42"))
+println(str_is_numeric("3.14"))
+println(str_is_numeric("abc"))
+
+// --- chr / ord ---
+println("=== chr / ord ===")
+println(chr(65))
+println(chr(97))
+println(ord("A"))
+println(ord("a"))
+
+// --- Format strings ---
+println("=== Format ===")
+let name = "Sanjeev"
+let age = 25
+println(fmt("Name: {}, Age: {}", name, age))
+println(fmt("{} + {} = {}", 10, 20, 30))

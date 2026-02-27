@@ -100,7 +100,7 @@ fn main() {
         }
         "compile" => {
             if args.len() < 3 {
-                eprintln!("[31merror:[0m No file specified");
+                eprintln!("\x1b[31merror:\x1b[0m No file specified");
                 eprintln!("Usage: vryn compile <file.vn>");
                 std::process::exit(1);
             }

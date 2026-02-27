@@ -1,0 +1,56 @@
+// ============================================
+// Vryn Example: I/O & File Operations
+// ============================================
+
+// --- Print functions ---
+println("=== Print ===")
+println("Hello with newline")
+print("No newline: ")
+println("after print")
+
+// --- Format strings ---
+println("=== Format ===")
+let name = "Vryn"
+let version = "0.5.0"
+println(fmt("{} v{}", name, version))
+println(fmt("{} + {} = {}", 10, 20, 30))
+println(str_format("Same as fmt: {} {}", "hello", "world"))
+
+// --- File operations ---
+println("=== File I/O ===")
+
+// Write to file
+write_file("/tmp/vryn_test.txt", "Hello from Vryn!")
+println("File written!")
+
+// Check file exists
+println(fmt("File exists? {}", file_exists("/tmp/vryn_test.txt")))
+println(fmt("Is file? {}", is_file("/tmp/vryn_test.txt")))
+
+// Read file back
+let content = read_file("/tmp/vryn_test.txt")
+println(fmt("File content: {}", content))
+
+// --- JSON file example ---
+println("=== JSON File ===")
+let json_str = "{\"app\":\"vryn-server\",\"port\":8080,\"debug\":true}"
+write_file("/tmp/vryn_config.json", json_str)
+println("Config saved!")
+
+let loaded = read_file("/tmp/vryn_config.json")
+println(fmt("Loaded config: {}", loaded))
+
+// --- CSV file example ---
+println("=== CSV File ===")
+let csv_text = "name,score,grade\nAlice,95,A\nBob,82,B\nCharlie,78,C"
+write_file("/tmp/vryn_grades.csv", csv_text)
+println("Grades CSV saved!")
+
+let csv_loaded = read_file("/tmp/vryn_grades.csv")
+println(csv_loaded)
+
+// --- Directory checks ---
+println("=== Directories ===")
+println(fmt("Is /tmp a dir? {}", is_dir("/tmp")))
+println(fmt("Is /nonexistent a dir? {}", is_dir("/nonexistent")))
+println(fmt("Current dir: {}", cwd()))

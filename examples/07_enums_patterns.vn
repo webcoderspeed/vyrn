@@ -1,0 +1,139 @@
+// ============================================
+// Vryn Example: Enums & Pattern Matching
+// ============================================
+
+// --- Basic Enum ---
+println("=== Basic Enum ===")
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+let c = Color::Red
+println(c)
+
+// --- Match expression ---
+println("=== Match ===")
+fun color_name(c) {
+    return match c {
+        Color::Red => "Laal (Red)",
+        Color::Green => "Hara (Green)",
+        Color::Blue => "Neela (Blue)",
+        _ => "Unknown",
+    }
+}
+println(color_name(Color::Red))
+println(color_name(Color::Green))
+println(color_name(Color::Blue))
+
+// --- Enum with data ---
+println("=== Enum with Data ===")
+enum Shape {
+    Circle,
+    Rectangle,
+    Triangle,
+}
+
+fun describe_shape(shape, data) {
+    return match shape {
+        Shape::Circle => fmt("Circle with radius {}", data[0]),
+        Shape::Rectangle => fmt("Rectangle {}x{}", data[0], data[1]),
+        Shape::Triangle => "Triangle",
+        _ => "Unknown shape",
+    }
+}
+println(describe_shape(Shape::Circle, [5]))
+println(describe_shape(Shape::Rectangle, [10, 20]))
+
+// --- Pattern matching on values ---
+println("=== Value Matching ===")
+fun classify(n) {
+    return match n {
+        0 => "zero",
+        1 => "one",
+        2 => "two",
+        _ => "many",
+    }
+}
+println(classify(0))
+println(classify(1))
+println(classify(42))
+
+// --- Match with guards ---
+println("=== Guards ===")
+fun temperature(t) {
+    return match t {
+        t if t < 0 => "Freezing!",
+        t if t < 20 => "Cold",
+        t if t < 35 => "Pleasant",
+        t if t < 45 => "Hot",
+        _ => "Extreme!",
+    }
+}
+println(temperature(-5))
+println(temperature(15))
+println(temperature(25))
+println(temperature(40))
+println(temperature(50))
+
+// --- Option pattern ---
+println("=== Option-like ===")
+enum Option {
+    Some,
+    None,
+}
+
+fun find_user(id) {
+    if id == 1 {
+        return Option::Some
+    }
+    return Option::None
+}
+
+let result = find_user(1)
+let msg = match result {
+    Option::Some => "User found!",
+    Option::None => "User not found",
+    _ => "Error",
+}
+println(msg)
+
+// --- Wildcard pattern ---
+println("=== Wildcard ===")
+fun get_http_status(code) {
+    return match code {
+        200 => "OK",
+        201 => "Created",
+        400 => "Bad Request",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        _ => fmt("Unknown status: {}", code),
+    }
+}
+println(get_http_status(200))
+println(get_http_status(404))
+println(get_http_status(418))
+
+// --- Nested pattern example ---
+println("=== Day of Week ===")
+enum Day {
+    Mon,
+    Tue,
+    Wed,
+    Thu,
+    Fri,
+    Sat,
+    Sun,
+}
+
+fun is_weekend(day) {
+    return match day {
+        Day::Sat => true,
+        Day::Sun => true,
+        _ => false,
+    }
+}
+println(is_weekend(Day::Fri))
+println(is_weekend(Day::Sat))
+println(is_weekend(Day::Sun))

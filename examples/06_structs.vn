@@ -1,0 +1,69 @@
+// ============================================
+// Vryn Example: Structs — Definition, Init, Impl
+// ============================================
+
+// --- Basic Struct ---
+println("=== Basic Struct ===")
+struct Point {
+    x: int,
+    y: int,
+}
+
+let p = Point { x: 10, y: 20 }
+println(p.x)
+println(p.y)
+
+// --- Struct with computed values ---
+println("=== Struct Factory ===")
+fun make_point(x, y) {
+    return Point { x: x, y: y }
+}
+
+let origin = make_point(0, 0)
+let target = make_point(3, 4)
+println(fmt("Origin: ({}, {})", origin.x, origin.y))
+println(fmt("Target: ({}, {})", target.x, target.y))
+
+// --- Distance between points ---
+fun distance(p1, p2) {
+    let dx = p2.x - p1.x
+    let dy = p2.y - p1.y
+    return sqrt(float(dx * dx + dy * dy))
+}
+println(fmt("Distance: {}", distance(origin, target)))
+
+// --- Array of structs ---
+println("=== Array of Structs ===")
+let pt1 = Point { x: 1, y: 2 }
+let pt2 = Point { x: 3, y: 4 }
+let pt3 = Point { x: 5, y: 6 }
+let points = [pt1, pt2, pt3]
+for pt in points {
+    println(fmt("({}, {})", pt.x, pt.y))
+}
+
+// --- Rectangle struct ---
+println("=== Rectangle ===")
+struct Rect {
+    width: float,
+    height: float,
+}
+
+let r1 = Rect { width: 10.0, height: 5.0 }
+let r2 = Rect { width: 7.0, height: 7.0 }
+
+fun rect_area(r) {
+    return r.width * r.height
+}
+
+fun rect_perimeter(r) {
+    return 2.0 * (r.width + r.height)
+}
+
+fun rect_is_square(r) {
+    return r.width == r.height
+}
+
+println(fmt("r1 area: {}, perimeter: {}", rect_area(r1), rect_perimeter(r1)))
+println(fmt("r1 is square: {}", rect_is_square(r1)))
+println(fmt("r2 is square: {}", rect_is_square(r2)))

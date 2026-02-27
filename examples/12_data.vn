@@ -1,0 +1,75 @@
+// ============================================
+// Vryn Example: Data — Structs and Type Operations
+// ============================================
+
+// --- Working with structured data ---
+println("=== Structured Data ===")
+struct Product {
+    name: str,
+    price: int,
+    quantity: int,
+}
+
+let product1 = Product { name: "Mango", price: 50, quantity: 10 }
+let product2 = Product { name: "Banana", price: 30, quantity: 20 }
+let product3 = Product { name: "Guava", price: 25, quantity: 15 }
+
+let products = [product1, product2, product3]
+
+// --- Display products ---
+println("=== Inventory ===")
+for product in products {
+    println(product.name)
+    println(product.price)
+    println(product.quantity)
+}
+
+// --- Calculations with data ---
+println("=== Total Value ===")
+let total_value = (product1.price * product1.quantity) + (product2.price * product2.quantity) + (product3.price * product3.quantity)
+println(total_value)
+
+// --- Finding items ---
+println("=== Find Product ===")
+let search_name = "Banana"
+for p in products {
+    if p.name == search_name {
+        println("Found:")
+        println(p.name)
+        println(p.price)
+    }
+}
+
+// --- Type conversions ---
+println("=== Type Conversions ===")
+let val1 = to_str(42)
+let val2 = to_str(3.14)
+let val3 = to_int("100")
+let val4 = to_float("2.71")
+
+println(val1)
+println(val2)
+println(val3)
+println(val4)
+
+// --- String serialization ---
+println("=== String Representation ===")
+let data = [1, 2, 3, 4, 5]
+println(to_string(data))
+
+let person = Product { name: "Test", price: 100, quantity: 1 }
+println(to_string(person))
+
+// --- Array transformations ---
+println("=== Array Operations ===")
+let prices = [product1.price, product2.price, product3.price]
+let sum = arr_sum(prices)
+let min_price = arr_min(prices)
+let max_price = arr_max(prices)
+
+println("Sum:")
+println(sum)
+println("Min:")
+println(min_price)
+println("Max:")
+println(max_price)

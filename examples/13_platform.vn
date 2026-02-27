@@ -1,0 +1,82 @@
+// ============================================
+// Vryn Example: Platform, Bitwise & Number Bases
+// ============================================
+
+// --- Platform detection ---
+println("=== Platform Info ===")
+println(fmt("OS: {}", platform_os()))
+println(fmt("Arch: {}", platform_arch()))
+println(fmt("Family: {}", platform_family()))
+println(fmt("Endian: {}", platform_endian()))
+println(fmt("Pointer size: {} bytes", platform_pointer_size()))
+
+// --- Type sizes ---
+println("=== Type Sizes ===")
+println(fmt("int: {} bytes", sizeof("int")))
+println(fmt("float: {} bytes", sizeof("float")))
+println(fmt("bool: {} bytes", sizeof("bool")))
+println(fmt("char: {} bytes", sizeof("char")))
+
+// --- System info ---
+println("=== System ===")
+println(fmt("PID: {}", getpid()))
+println(fmt("Hostname: {}", hostname()))
+println(fmt("CWD: {}", cwd()))
+
+// --- File system checks ---
+println("=== File System ===")
+println(fmt("Is '.' a dir? {}", is_dir(".")))
+println(fmt("Is 'Cargo.toml' a file? {}", is_file("Cargo.toml")))
+println(fmt("Is 'nonexistent' a file? {}", is_file("nonexistent")))
+
+// --- Bitwise operations ---
+println("=== Bitwise ===")
+println(fmt("12 AND 10 = {}", bitwise_and(12, 10)))
+println(fmt("12 OR 10 = {}", bitwise_or(12, 10)))
+println(fmt("12 XOR 10 = {}", bitwise_xor(12, 10)))
+println(fmt("NOT 0 = {}", bitwise_not(0)))
+println(fmt("1 SHL 4 = {}", bitwise_shl(1, 4)))
+println(fmt("16 SHR 2 = {}", bitwise_shr(16, 2)))
+
+// Bit manipulation example: flags
+println("=== Bit Flags ===")
+let READ = 4
+let WRITE = 2
+let EXECUTE = 1
+
+let permissions = bitwise_or(READ, bitwise_or(WRITE, EXECUTE))
+println(fmt("RWX permissions: {}", permissions))
+println(fmt("Has READ? {}", bitwise_and(permissions, READ) > 0))
+println(fmt("Has WRITE? {}", bitwise_and(permissions, WRITE) > 0))
+println(fmt("Binary: {}", to_binary(permissions)))
+
+// --- Number base conversion ---
+println("=== Number Bases ===")
+println(fmt("255 in hex: {}", to_hex(255)))
+println(fmt("0xFF = {}", from_hex("ff")))
+println(fmt("0xFF = {}", from_hex("0xFF")))
+
+println(fmt("42 in binary: {}", to_binary(42)))
+println(fmt("0b101010 = {}", from_binary("101010")))
+
+println(fmt("8 in octal: {}", to_octal(8)))
+println(fmt("64 in octal: {}", to_octal(64)))
+
+// --- Colors in hex ---
+println("=== Color Hex ===")
+let red = 255
+let green = 128
+let blue = 64
+println(fmt("RGB({},{},{}) = #{}{}{}", red, green, blue, to_hex(red), to_hex(green), to_hex(blue)))
+
+// --- Byte arrays ---
+println("=== Bytes ===")
+let bytes = byte_array(5)
+println(fmt("Empty byte array: {}", bytes))
+
+let hello_bytes = [72, 101, 108, 108, 111]
+println(fmt("Bytes to string: {}", bytes_to_str(hello_bytes)))
+
+// chr / ord
+println(fmt("chr(65) = {}", chr(65)))
+println(fmt("ord('A') = {}", ord("A")))

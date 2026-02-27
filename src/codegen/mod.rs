@@ -3397,6 +3397,260 @@ impl Interpreter {
     std::process::exit(code);
 }
 
+"none" => {
+    return Ok(Value::None);
+}
+
+"arr_map" => {
+    if args.len() != 2 { return Err("arr_map() takes 2 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("arr_map() expects an array".to_string()) };
+    let func = self.eval_expression(&args[1])?;
+    let mut result = Vec::new();
+    for item in arr {
+        match &func {
+            Value::Function { params, body, .. } => {
+                self.env.push_scope();
+                if let Some(p) = params.first() {
+                    self.env.define(&p.name, item.clone(), false);
+                }
+                let mut val = Value::None;
+                for stmt in body {
+                    match self.exec_statement(stmt)? {
+                        Signal::Return(v) => { val = v; break; }
+                        _ => {}
+                    }
+                }
+                self.env.pop_scope();
+                result.push(val);
+            }
+            _ => return Err("arr_map() second argument must be a function".to_string()),
+        }
+    }
+    return Ok(Value::Array(result));
+}
+
+"arr_filter" => {
+    if args.len() != 2 { return Err("arr_filter() takes 2 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("arr_filter() expects an array".to_string()) };
+    let func = self.eval_expression(&args[1])?;
+    let mut result = Vec::new();
+    for item in arr {
+        match &func {
+            Value::Function { params, body, .. } => {
+                self.env.push_scope();
+                if let Some(p) = params.first() {
+                    self.env.define(&p.name, item.clone(), false);
+                }
+                let mut val = Value::Bool(false);
+                for stmt in body {
+                    match self.exec_statement(stmt)? {
+                        Signal::Return(v) => { val = v; break; }
+                        _ => {}
+                    }
+                }
+                self.env.pop_scope();
+                if matches!(val, Value::Bool(true)) {
+                    result.push(item);
+                }
+            }
+            _ => return Err("arr_filter() second argument must be a function".to_string()),
+        }
+    }
+    return Ok(Value::Array(result));
+}
+
+"arr_reduce" => {
+    if args.len() != 3 { return Err("arr_reduce() takes 3 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("arr_reduce() expects an array".to_string()) };
+    let mut acc = self.eval_expression(&args[1])?;
+    let func = self.eval_expression(&args[2])?;
+    for item in arr {
+        match &func {
+            Value::Function { params, body, .. } => {
+                self.env.push_scope();
+                if params.len() >= 2 {
+                    self.env.define(&params[0].name, acc.clone(), false);
+                    self.env.define(&params[1].name, item.clone(), false);
+                }
+                let mut val = Value::None;
+                for stmt in body {
+                    match self.exec_statement(stmt)? {
+                        Signal::Return(v) => { val = v; break; }
+                        _ => {}
+                    }
+                }
+                self.env.pop_scope();
+                acc = val;
+            }
+            _ => return Err("arr_reduce() third argument must be a function".to_string()),
+        }
+    }
+    return Ok(acc);
+}
+
+"arr_find" => {
+    if args.len() != 2 { return Err("arr_find() takes 2 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("arr_find() expects an array".to_string()) };
+    let func = self.eval_expression(&args[1])?;
+    for item in arr {
+        match &func {
+            Value::Function { params, body, .. } => {
+                self.env.push_scope();
+                if let Some(p) = params.first() {
+                    self.env.define(&p.name, item.clone(), false);
+                }
+                let mut val = Value::Bool(false);
+                for stmt in body {
+                    match self.exec_statement(stmt)? {
+                        Signal::Return(v) => { val = v; break; }
+                        _ => {}
+                    }
+                }
+                self.env.pop_scope();
+                if matches!(val, Value::Bool(true)) {
+                    return Ok(item);
+                }
+            }
+            _ => return Err("arr_find() second argument must be a function".to_string()),
+        }
+    }
+    return Ok(Value::None);
+}
+
+"arr_any" => {
+    if args.len() != 2 { return Err("arr_any() takes 2 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("arr_any() expects an array".to_string()) };
+    let func = self.eval_expression(&args[1])?;
+    for item in arr {
+        match &func {
+            Value::Function { params, body, .. } => {
+                self.env.push_scope();
+                if let Some(p) = params.first() {
+                    self.env.define(&p.name, item.clone(), false);
+                }
+                let mut val = Value::Bool(false);
+                for stmt in body {
+                    match self.exec_statement(stmt)? {
+                        Signal::Return(v) => { val = v; break; }
+                        _ => {}
+                    }
+                }
+                self.env.pop_scope();
+                if matches!(val, Value::Bool(true)) {
+                    return Ok(Value::Bool(true));
+                }
+            }
+            _ => {}
+        }
+    }
+    return Ok(Value::Bool(false));
+}
+
+"arr_all" => {
+    if args.len() != 2 { return Err("arr_all() takes 2 arguments".to_string()); }
+    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("arr_all() expects an array".to_string()) };
+    let func = self.eval_expression(&args[1])?;
+    for item in arr {
+        match &func {
+            Value::Function { params, body, .. } => {
+                self.env.push_scope();
+                if let Some(p) = params.first() {
+                    self.env.define(&p.name, item.clone(), false);
+                }
+                let mut val = Value::Bool(false);
+                for stmt in body {
+                    match self.exec_statement(stmt)? {
+                        Signal::Return(v) => { val = v; break; }
+                        _ => {}
+                    }
+                }
+                self.env.pop_scope();
+                if !matches!(val, Value::Bool(true)) {
+                    return Ok(Value::Bool(false));
+                }
+            }
+            _ => {}
+        }
+    }
+    return Ok(Value::Bool(true));
+}
+
+"str_reverse" => {
+    if args.len() != 1 { return Err("str_reverse() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("str_reverse() expects a string".to_string()) };
+    return Ok(Value::Str(s.chars().rev().collect()));
+}
+
+"str_repeat" => {
+    if args.len() != 2 { return Err("str_repeat() takes 2 arguments".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("str_repeat() expects a string".to_string()) };
+    let n = match self.eval_expression(&args[1])? { Value::Int(n) => n as usize, _ => return Err("str_repeat() expects an integer".to_string()) };
+    return Ok(Value::Str(s.repeat(n)));
+}
+
+"str_index_of" => {
+    if args.len() != 2 { return Err("str_index_of() takes 2 arguments".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("str_index_of() expects strings".to_string()) };
+    let sub = match self.eval_expression(&args[1])? { Value::Str(s) => s, _ => return Err("str_index_of() expects strings".to_string()) };
+    return Ok(match s.find(&sub) { Some(i) => Value::Int(i as i64), std::option::Option::None => Value::Int(-1) });
+}
+
+"str_pad_left" => {
+    if args.len() != 3 { return Err("str_pad_left() takes 3 arguments".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("str_pad_left() expects a string".to_string()) };
+    let width = match self.eval_expression(&args[1])? { Value::Int(n) => n as usize, _ => return Err("str_pad_left() expects an integer".to_string()) };
+    let pad = match self.eval_expression(&args[2])? { Value::Str(s) => s, _ => return Err("str_pad_left() expects a string".to_string()) };
+    let pad_char = pad.chars().next().unwrap_or(' ');
+    let current_len = s.len();
+    if current_len >= width { return Ok(Value::Str(s)); }
+    let padding: String = std::iter::repeat(pad_char).take(width - current_len).collect();
+    return Ok(Value::Str(format!("{}{}", padding, s)));
+}
+
+"str_pad_right" => {
+    if args.len() != 3 { return Err("str_pad_right() takes 3 arguments".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("str_pad_right() expects a string".to_string()) };
+    let width = match self.eval_expression(&args[1])? { Value::Int(n) => n as usize, _ => return Err("str_pad_right() expects an integer".to_string()) };
+    let pad = match self.eval_expression(&args[2])? { Value::Str(s) => s, _ => return Err("str_pad_right() expects a string".to_string()) };
+    let pad_char = pad.chars().next().unwrap_or(' ');
+    let current_len = s.len();
+    if current_len >= width { return Ok(Value::Str(s)); }
+    let padding: String = std::iter::repeat(pad_char).take(width - current_len).collect();
+    return Ok(Value::Str(format!("{}{}", s, padding)));
+}
+
+"parse_int" => {
+    if args.len() != 1 { return Err("parse_int() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => return Ok(Value::Int(match v { Value::Int(n) => n, Value::Float(f) => f as i64, _ => 0 })) };
+    return Ok(Value::Int(s.parse::<i64>().unwrap_or(0)));
+}
+
+"parse_float" => {
+    if args.len() != 1 { return Err("parse_float() takes 1 argument".to_string()); }
+    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => return Ok(Value::Float(match v { Value::Float(f) => f, Value::Int(n) => n as f64, _ => 0.0 })) };
+    return Ok(Value::Float(s.parse::<f64>().unwrap_or(0.0)));
+}
+
+"to_str" => {
+    if args.len() != 1 { return Err("to_str() takes 1 argument".to_string()); }
+    let val = self.eval_expression(&args[0])?;
+    return Ok(Value::Str(format!("{}", val)));
+}
+
+"map_remove" => {
+    if args.len() != 2 { return Err("map_remove() takes 2 arguments".to_string()); }
+    let map = self.eval_expression(&args[0])?;
+    let key = match self.eval_expression(&args[1])? { Value::Str(s) => s, _ => return Err("map_remove() key must be a string".to_string()) };
+    if let Value::Struct { name, mut fields } = map {
+        fields.remove(&key);
+        return Ok(Value::Struct { name, fields });
+    }
+    return Err("map_remove() expects a map".to_string());
+}
+
+
+
+
 
 
 

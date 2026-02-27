@@ -1,0 +1,105 @@
+// ============================================
+// Vryn Example: Arrays — All Array Built-ins
+// ============================================
+
+println("=== Array Basics ===")
+var arr = [10, 20, 30, 40, 50]
+println(arr)
+println(len(arr))
+println(arr[0])
+println(arr[4])
+
+// --- Push & Pop ---
+println("=== Push & Pop ===")
+push(arr, 60)
+println(arr)
+let last = pop(arr)
+println(last)
+println(arr)
+
+// --- First & Last ---
+println("=== First & Last ===")
+println(arr_first([1, 2, 3]))
+println(arr_last([1, 2, 3]))
+
+// --- Slice ---
+println("=== Slice ===")
+println(arr_slice([10, 20, 30, 40, 50], 1, 4))
+
+// --- Take & Skip ---
+println("=== Take & Skip ===")
+println(arr_take([1, 2, 3, 4, 5], 3))
+println(arr_skip([1, 2, 3, 4, 5], 2))
+
+// --- Chunk ---
+println("=== Chunk ===")
+println(arr_chunk([1, 2, 3, 4, 5, 6, 7], 3))
+
+// --- Reverse & Sort ---
+println("=== Reverse & Sort ===")
+println(arr_reverse([3, 1, 4, 1, 5]))
+println(arr_sort([5, 3, 8, 1, 9, 2]))
+
+// --- Contains ---
+println("=== Contains ===")
+println(arr_contains([1, 2, 3], 2))
+println(arr_contains([1, 2, 3], 5))
+
+// --- Count ---
+println("=== Count ===")
+println(arr_count([1, 2, 3, 2, 1, 2], 2))
+
+// --- Unique ---
+println("=== Unique ===")
+println(arr_unique([1, 2, 2, 3, 3, 3, 4]))
+
+// --- Compact (remove None) ---
+println("=== Compact ===")
+println(arr_compact([1, none(), 2, none(), 3]))
+
+// --- Flatten ---
+println("=== Flatten ===")
+println(arr_flatten([[1, 2], [3, 4], [5]]))
+
+// --- Map / Filter / Reduce ---
+println("=== Functional ===")
+let nums = [1, 2, 3, 4, 5]
+println(arr_map(nums, |x| x * x))
+println(arr_filter(nums, |x| x > 3))
+println(arr_reduce(nums, 0, |acc, x| acc + x))
+
+// --- Find / Any / All ---
+println("=== Find / Any / All ===")
+println(arr_find([10, 20, 30], |x| x > 15))
+println(arr_any([1, 2, 3], |x| x > 2))
+println(arr_all([2, 4, 6], |x| x % 2 == 0))
+
+// --- Enumerate ---
+println("=== Enumerate ===")
+let fruits = ["Mango", "Apple", "Guava"]
+let indexed = arr_enumerate(fruits)
+for pair in indexed {
+    println(fmt("{}: {}", pair[0], pair[1]))
+}
+
+// --- Join ---
+println("=== Join ===")
+println(arr_join(["Radha", "Krishna", "Vrindavan"], ", "))
+
+// --- Zip ---
+println("=== Zip ===")
+let names = ["Alice", "Bob", "Charlie"]
+let scores = [95, 87, 92]
+let pairs = zip(names, scores)
+println(pairs)
+
+// --- Sum / Min / Max ---
+println("=== Aggregates ===")
+println(arr_sum([10, 20, 30]))
+println(arr_min([5, 3, 8, 1]))
+println(arr_max([5, 3, 8, 1]))
+
+// --- Range & Repeat ---
+println("=== Generators ===")
+println(range_arr(1, 6))
+println(repeat("x", 5))
