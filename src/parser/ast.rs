@@ -44,6 +44,13 @@ pub enum Statement {
         then_body: Vec<Statement>,
         else_body: Option<Vec<Statement>>,
     },
+    /// if let pattern = expr { body } else { body }
+    IfLet {
+        pattern: Pattern,
+        expr: Box<Expression>,
+        then_body: Vec<Statement>,
+        else_body: Option<Vec<Statement>>,
+    },
     /// while condition { body }
     While {
         condition: Box<Expression>,
@@ -184,6 +191,26 @@ pub enum Pattern {
     EnumVariant {
         name: String,
         fields: Vec<Pattern>,
+    },
+    /// Tuple pattern: (a, b, c)
+    Tuple(Vec<Pattern>),
+    /// Struct pattern: Point { x, y }
+    Struct {
+        name: String,
+        fields: Vec<(String, Pattern)>,
+    },
+    /// Range pattern: 0..10 or 0..=10
+    Range {
+        start: Box<Expression>,
+        end: Box<Expression>,
+        inclusive: bool,
+    },
+    /// Or-pattern: A | B | C
+    Or(Vec<Pattern>),
+    /// Guard clause: pattern if condition
+    Guard {
+        pattern: Box<Pattern>,
+        condition: Box<Expression>,
     },
 }
 

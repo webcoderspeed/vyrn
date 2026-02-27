@@ -1,7 +1,8 @@
 // Vryn - Hello World!
 // Yeh hai duniya ka pehla Vryn program!
+// Notice: NO type annotations needed! Simple like Python, powerful like Rust.
 
-fn main() {
+fun main() {
     println("Hello, World!")
     println("Welcome to Vryn Programming Language!")
 
@@ -9,13 +10,13 @@ fn main() {
     let age = 25
     println("Creator: {name}, Age: {age}")
 
-    // Math
+    // Math — simple!
     let x = 10
     let y = 20
     println("x + y =")
     println(x + y)
 
-    // Function call
+    // Function call — no types needed!
     let result = add(5, 3)
     println("5 + 3 =")
     println(result)
@@ -31,8 +32,8 @@ fn main() {
         println("Minor!")
     }
 
-    // Loop
-    let mut count = 0
+    // Mutable variable — just use 'var'!
+    var count = 0
     while count < 5 {
         println(count)
         count = count + 1
@@ -47,15 +48,28 @@ fn main() {
     for i in 0..5 {
         println(i)
     }
+
+    // Error handling
+    let safe = divide(10, 0)
+    println(safe)
 }
 
-fn add(a: i32, b: i32) -> i32 {
+// Simple functions — no type annotations needed!
+fun add(a, b) {
     return a + b
 }
 
-fn fib(n: i32) -> i32 {
+fun fib(n) {
     if n <= 1 {
         return n
     }
     return fib(n - 1) + fib(n - 2)
+}
+
+// You CAN add types when you want (optional!)
+fun divide(a: int, b: int) {
+    if b == 0 {
+        return Err("Cannot divide by zero!")
+    }
+    return Ok(a / b)
 }

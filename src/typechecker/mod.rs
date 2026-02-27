@@ -518,6 +518,19 @@ impl TypeChecker {
                 }
                 Ok(())
             }
+
+            Statement::IfLet { pattern: _, expr, then_body, else_body } => {
+                let _expr_type = self.infer_expr(expr)?;
+                for stmt in then_body {
+                    self.check_statement(stmt)?;
+                }
+                if let Some(else_stmts) = else_body {
+                    for stmt in else_stmts {
+                        self.check_statement(stmt)?;
+                    }
+                }
+                Ok(())
+            }
         }
     }
 
@@ -830,7 +843,7 @@ impl TypeChecker {
             }
 
             Expression::QuestionMark { expr } => {
-                let expr_type = self.infer_expr(expr)?;
+                let _expr_type = self.infer_expr(expr)?;
                 // Question mark operator expects a Result type and unwraps it
                 // For now, we return Any to avoid strict type checking
                 Ok(VrynType::Any)

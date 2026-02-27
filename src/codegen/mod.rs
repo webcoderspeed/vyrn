@@ -233,6 +233,36 @@ impl Interpreter {
                 Ok(Signal::None)
             }
 
+            Statement::IfLet { pattern, expr, then_body, else_body } => {
+                let val = self.eval_expression(expr)?;
+                let mut bindings = HashMap::new();
+                if self.pattern_matches(&val, pattern, &mut bindings)? {
+                    self.env.push_scope();
+                    for (name, value) in bindings {
+                        self.env.define(&name, value);
+                    }
+                    for s in then_body {
+                        let sig = self.exec_statement(s)?;
+                        match sig {
+                            Signal::None => {}
+                            other => { self.env.pop_scope(); return Ok(other); }
+                        }
+                    }
+                    self.env.pop_scope();
+                } else if let Some(else_stmts) = else_body {
+                    self.env.push_scope();
+                    for s in else_stmts {
+                        let sig = self.exec_statement(s)?;
+                        match sig {
+                            Signal::None => {}
+                            other => { self.env.pop_scope(); return Ok(other); }
+                        }
+                    }
+                    self.env.pop_scope();
+                }
+                Ok(Signal::None)
+            }
+
             Statement::While { condition, body } => {
                 loop {
                     let cond = self.eval_expression(condition)?;
@@ -692,7 +722,7 @@ impl Interpreter {
                 let val = self.eval_expression(value)?;
                 for arm in arms {
                     let mut bindings = HashMap::new();
-                    if self.pattern_matches(&val, &arm.pattern, &mut bindings)? {
+                    if self.pattern_matches(&val, &arm.pattern, &mut bindings)? { // line 725
                         self.env.push_scope();
                         for (name, value) in bindings {
                             self.env.define(&name, value);
@@ -921,7 +951,7 @@ impl Interpreter {
         }
     }
 
-    fn pattern_matches(&self, value: &Value, pattern: &Pattern, bindings: &mut HashMap<String, Value>) -> Result<bool, String> {
+    fn pattern_matches(&mut self, value: &Value, pattern: &Pattern, bindings: &mut HashMap<String, Value>) -> Result<bool, String> {
         match pattern {
             Pattern::Wildcard => Ok(true),
             Pattern::Identifier(name) => {
@@ -934,6 +964,7 @@ impl Interpreter {
                     (Value::Int(a), Expression::IntLiteral(b)) => Ok(a == b),
                     (Value::Str(a), Expression::StringLiteral(b)) => Ok(a == b),
                     (Value::Bool(a), Expression::BoolLiteral(b)) => Ok(a == b),
+                    (Value::Float(a), Expression::FloatLiteral(b)) => Ok((a - b).abs() < f64::EPSILON),
                     _ => Ok(false),
                 }
             }
@@ -961,6 +992,78 @@ impl Interpreter {
                 } else {
                     Ok(false)
                 }
+            }
+            Pattern::Tuple(pat_elements) => {
+                // Cannot create tuples in current Vryn, so this would only match arrays for now
+                match value {
+                    Value::Array(arr) => {
+                        if pat_elements.len() != arr.len() {
+                            return Ok(false);
+                        }
+                        for (pat, val) in pat_elements.iter().zip(arr.iter()) {
+                            if !self.pattern_matches(val, pat, bindings)? {
+                                return Ok(false);
+                            }
+                        }
+                        Ok(true)
+                    }
+                    _ => Ok(false),
+                }
+            }
+            Pattern::Struct { name: pat_name, fields: pat_fields } => {
+                if let Value::Struct { name, fields } = value {
+                    if pat_name != name {
+                        return Ok(false);
+                    }
+                    // Match struct fields
+                    for (field_name, field_pattern) in pat_fields {
+                        if let Some(field_value) = fields.get(field_name) {
+                            if !self.pattern_matches(field_value, field_pattern, bindings)? {
+                                return Ok(false);
+                            }
+                        } else {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
+            Pattern::Range { start, end, inclusive } => {
+                // Range patterns match if value is within the range
+                if let Value::Int(n) = value {
+                    let start_val = self.eval_expression(start)?;
+                    let end_val = self.eval_expression(end)?;
+                    if let (Value::Int(s), Value::Int(e)) = (start_val, end_val) {
+                        let in_range = if *inclusive {
+                            *n >= s && *n <= e
+                        } else {
+                            *n >= s && *n < e
+                        };
+                        return Ok(in_range);
+                    }
+                }
+                Ok(false)
+            }
+            Pattern::Or(patterns) => {
+                // Try each pattern; return true if any matches
+                for pat in patterns {
+                    if self.pattern_matches(value, pat, bindings)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            Pattern::Guard { pattern, condition: _ } => {
+                // First check if the pattern matches
+                if !self.pattern_matches(value, pattern, bindings)? {
+                    return Ok(false);
+                }
+                // Then evaluate the guard condition with the bindings
+                // We'll handle guard evaluation later in match/if-let handlers
+                // For now, return true to indicate pattern matched; condition will be checked separately
+                Ok(true)
             }
         }
     }

@@ -476,11 +476,12 @@ mod tests {
 
     #[test]
     fn test_hello_world() {
-        let source = r#"fn main() { println("Hello, World!") }"#;
+        // New syntax: fun
+        let source = r#"fun main() { println("Hello, World!") }"#;
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
 
-        assert_eq!(tokens[0].kind, TokenKind::Fn);
+        assert_eq!(tokens[0].kind, TokenKind::Fun);
         assert_eq!(tokens[1].kind, TokenKind::Identifier("main".to_string()));
         assert_eq!(tokens[2].kind, TokenKind::LeftParen);
         assert_eq!(tokens[3].kind, TokenKind::RightParen);
@@ -490,15 +491,22 @@ mod tests {
 
     #[test]
     fn test_variables() {
-        let source = r#"let mut x = 42"#;
+        // var for mutable
+        let source = r#"var x = 42"#;
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
 
-        assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Mut);
-        assert_eq!(tokens[2].kind, TokenKind::Identifier("x".to_string()));
-        assert_eq!(tokens[3].kind, TokenKind::Equal);
-        assert_eq!(tokens[4].kind, TokenKind::IntLiteral(42));
+        assert_eq!(tokens[0].kind, TokenKind::Var);
+        assert_eq!(tokens[1].kind, TokenKind::Identifier("x".to_string()));
+        assert_eq!(tokens[2].kind, TokenKind::Equal);
+        assert_eq!(tokens[3].kind, TokenKind::IntLiteral(42));
+
+        // let mut still works (backward compat)
+        let source2 = r#"let mut y = 10"#;
+        let mut lexer2 = Lexer::new(source2);
+        let tokens2 = lexer2.tokenize().unwrap();
+        assert_eq!(tokens2[0].kind, TokenKind::Let);
+        assert_eq!(tokens2[1].kind, TokenKind::Mut);
     }
 
     #[test]
@@ -580,15 +588,21 @@ mod tests {
 
     #[test]
     fn test_full_function() {
-        let source = r#"fn add(a: i32, b: i32) -> i32 {
+        // Simple syntax: fun with no type annotations
+        let source = r#"fun add(a, b) {
     a + b
 }"#;
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().unwrap();
 
-        assert_eq!(tokens[0].kind, TokenKind::Fn);
+        assert_eq!(tokens[0].kind, TokenKind::Fun);
         assert_eq!(tokens[1].kind, TokenKind::Identifier("add".to_string()));
-        // Should parse without errors
         assert!(tokens.last().unwrap().kind == TokenKind::Eof);
+
+        // fn still works as alias
+        let source2 = r#"fn add(a: int, b: int) -> int { a + b }"#;
+        let mut lexer2 = Lexer::new(source2);
+        let tokens2 = lexer2.tokenize().unwrap();
+        assert_eq!(tokens2[0].kind, TokenKind::Fun); // fn maps to Fun
     }
 }

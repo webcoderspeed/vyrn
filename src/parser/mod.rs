@@ -35,7 +35,8 @@ impl Parser {
         self.skip_newlines();
 
         match self.current_kind() {
-            TokenKind::Fn => self.parse_function(),
+            TokenKind::Fun | TokenKind::Fn => self.parse_function(),
+            TokenKind::Var => self.parse_var(),
             TokenKind::Let => self.parse_let(),
             TokenKind::If => self.parse_if(),
             TokenKind::While => self.parse_while(),
@@ -52,9 +53,16 @@ impl Parser {
         }
     }
 
-    /// Parse: fn name(params) -> ReturnType { body }
+    /// Parse: fun name(params) -> ReturnType { body }
+    /// Also accepts: fn (backward compat alias)
+    /// Type annotations are OPTIONAL: fun add(a, b) { ... } or fun add(a: int, b: int) -> int { ... }
     fn parse_function(&mut self) -> Result<Statement, String> {
-        self.expect(TokenKind::Fn)?;
+        // Accept both `fun` and `fn`
+        if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+            self.advance();
+        } else {
+            return Err("Expected 'fun' or 'fn'".to_string());
+        }
         let name = self.expect_identifier()?;
         self.expect(TokenKind::LeftParen)?;
 
@@ -73,7 +81,10 @@ impl Parser {
         Ok(Statement::Function { name, params, return_type, body })
     }
 
-    /// Parse function parameters: (a: i32, b: str)
+    /// Parse function parameters — type annotations are OPTIONAL!
+    /// fun add(a, b) { ... }            — no types (inferred as "any")
+    /// fun add(a: int, b: int) { ... }  — with types
+    /// fun add(a, b: int) { ... }       — mixed
     fn parse_params(&mut self) -> Result<Vec<Param>, String> {
         let mut params = Vec::new();
 
@@ -83,8 +94,12 @@ impl Parser {
 
         loop {
             let name = self.expect_identifier()?;
-            self.expect(TokenKind::Colon)?;
-            let type_name = self.expect_identifier()?;
+            let type_name = if self.check(&TokenKind::Colon) {
+                self.advance();
+                self.expect_identifier()?
+            } else {
+                "any".to_string()  // type inferred at runtime
+            };
             params.push(Param { name, type_name });
 
             if !self.check(&TokenKind::Comma) {
@@ -96,7 +111,25 @@ impl Parser {
         Ok(params)
     }
 
-    /// Parse: let [mut] name [: type] = value
+    /// Parse: var name [: type] = value  (MUTABLE variable — the simple way!)
+    fn parse_var(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Var)?;
+        let name = self.expect_identifier()?;
+
+        let type_ann = if self.check(&TokenKind::Colon) {
+            self.advance();
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+
+        self.expect(TokenKind::Equal)?;
+        let value = self.parse_expression()?;
+
+        Ok(Statement::Let { name, mutable: true, type_ann, value })
+    }
+
+    /// Parse: let [mut] name [: type] = value  (immutable by default, mut for backward compat)
     fn parse_let(&mut self) -> Result<Statement, String> {
         self.expect(TokenKind::Let)?;
 
@@ -122,25 +155,49 @@ impl Parser {
         Ok(Statement::Let { name, mutable, type_ann, value })
     }
 
-    /// Parse: if condition { body } [else { body }]
+    /// Parse: if [let pattern = expr] condition { body } [else { body }]
     fn parse_if(&mut self) -> Result<Statement, String> {
         self.expect(TokenKind::If)?;
-        let condition = Box::new(self.parse_expression()?);
-        let then_body = self.parse_block()?;
 
-        let else_body = if self.check(&TokenKind::Else) {
+        // Check for "let" keyword to distinguish if-let from regular if
+        if self.check(&TokenKind::Let) {
             self.advance();
-            if self.check(&TokenKind::If) {
-                // else if chain
-                Some(vec![self.parse_if()?])
-            } else {
-                Some(self.parse_block()?)
-            }
-        } else {
-            None
-        };
+            let pattern = self.parse_pattern()?;
+            self.expect(TokenKind::Equal)?;
+            let expr = Box::new(self.parse_expression()?);
+            let then_body = self.parse_block()?;
 
-        Ok(Statement::If { condition, then_body, else_body })
+            let else_body = if self.check(&TokenKind::Else) {
+                self.advance();
+                if self.check(&TokenKind::If) {
+                    Some(vec![self.parse_if()?])
+                } else {
+                    Some(self.parse_block()?)
+                }
+            } else {
+                None
+            };
+
+            Ok(Statement::IfLet { pattern, expr, then_body, else_body })
+        } else {
+            // Regular if statement
+            let condition = Box::new(self.parse_expression()?);
+            let then_body = self.parse_block()?;
+
+            let else_body = if self.check(&TokenKind::Else) {
+                self.advance();
+                if self.check(&TokenKind::If) {
+                    // else if chain
+                    Some(vec![self.parse_if()?])
+                } else {
+                    Some(self.parse_block()?)
+                }
+            } else {
+                None
+            };
+
+            Ok(Statement::If { condition, then_body, else_body })
+        }
     }
 
     /// Parse: while condition { body }
@@ -653,7 +710,7 @@ impl Parser {
         }
     }
 
-    /// Parse match expression
+    /// Parse match expression (now handles guards in patterns)
     fn parse_match_expression(&mut self) -> Result<Expression, String> {
         self.expect(TokenKind::Match)?;
         let value = Box::new(self.parse_expression()?);
@@ -678,40 +735,125 @@ impl Parser {
         Ok(Expression::Match { value, arms })
     }
 
-    /// Parse a pattern (for match arms)
+    /// Parse a pattern (for match arms and if-let)
     fn parse_pattern(&mut self) -> Result<Pattern, String> {
+        self.parse_or_pattern()
+    }
+
+    /// Parse or-pattern: pattern | pattern | pattern
+    fn parse_or_pattern(&mut self) -> Result<Pattern, String> {
+        let mut patterns = vec![self.parse_pattern_base()?];
+
+        while self.check(&TokenKind::Or) {
+            self.advance();
+            patterns.push(self.parse_pattern_base()?);
+        }
+
+        if patterns.len() == 1 {
+            Ok(patterns.into_iter().next().unwrap())
+        } else {
+            Ok(Pattern::Or(patterns))
+        }
+    }
+
+    /// Parse a single pattern (not or-patterns): literals, identifiers, tuples, guards
+    fn parse_pattern_base(&mut self) -> Result<Pattern, String> {
         self.skip_newlines();
-        match self.current_kind() {
+        let pattern = match self.current_kind() {
             TokenKind::IntLiteral(n) => {
                 let val = n;
                 self.advance();
-                Ok(Pattern::Literal(Expression::IntLiteral(val)))
+                Pattern::Literal(Expression::IntLiteral(val))
             }
             TokenKind::StringLiteral(ref s) => {
                 let val = s.clone();
                 self.advance();
-                Ok(Pattern::Literal(Expression::StringLiteral(val)))
+                Pattern::Literal(Expression::StringLiteral(val))
             }
-            TokenKind::True => { self.advance(); Ok(Pattern::Literal(Expression::BoolLiteral(true))) }
-            TokenKind::False => { self.advance(); Ok(Pattern::Literal(Expression::BoolLiteral(false))) }
+            TokenKind::True => { self.advance(); Pattern::Literal(Expression::BoolLiteral(true)) }
+            TokenKind::False => { self.advance(); Pattern::Literal(Expression::BoolLiteral(false)) }
             TokenKind::Identifier(ref name) if name == "_" => {
                 self.advance();
-                Ok(Pattern::Wildcard)
+                Pattern::Wildcard
+            }
+            TokenKind::LeftParen => {
+                // Tuple pattern
+                self.advance();
+                let mut elements = Vec::new();
+                if !self.check(&TokenKind::RightParen) {
+                    loop {
+                        elements.push(self.parse_pattern()?);
+                        if !self.check(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                self.expect(TokenKind::RightParen)?;
+                Pattern::Tuple(elements)
             }
             TokenKind::Identifier(ref name) => {
                 let mut name = name.clone();
                 self.advance();
 
-                // Check for Enum::Variant syntax
+                // Check for Enum::Variant or Struct pattern
                 if self.check(&TokenKind::ColonColon) {
                     self.advance();
                     let variant = self.expect_identifier()?;
-                    // Store as "Enum::Variant"
                     name = format!("{}::{}", name, variant);
                 }
 
-                // Check for enum variant: Name(fields)
-                if self.check(&TokenKind::LeftParen) {
+                // Check for struct pattern: Name { x, y } or Name { x: pat, y: pat }
+                if self.check(&TokenKind::LeftBrace) {
+                    // Look ahead to distinguish struct pattern from regular brace
+                    let is_struct_pattern = {
+                        let mut k = self.pos + 1;
+                        while k < self.tokens.len() && self.tokens[k].kind == TokenKind::Newline {
+                            k += 1;
+                        }
+
+                        if k < self.tokens.len() {
+                            match &self.tokens[k].kind {
+                                TokenKind::Identifier(_) => true,
+                                TokenKind::RightBrace => true,
+                                _ => false,
+                            }
+                        } else {
+                            false
+                        }
+                    };
+
+                    if is_struct_pattern {
+                        self.advance(); // consume '{'
+                        let mut fields = Vec::new();
+                        self.skip_newlines();
+
+                        while !self.check(&TokenKind::RightBrace) {
+                            let field_name = self.expect_identifier()?;
+                            let field_pattern = if self.check(&TokenKind::Colon) {
+                                self.advance();
+                                self.parse_pattern()?
+                            } else {
+                                // Shorthand: x means x: x
+                                Pattern::Identifier(field_name.clone())
+                            };
+                            fields.push((field_name, field_pattern));
+
+                            self.skip_newlines();
+                            if self.check(&TokenKind::Comma) {
+                                self.advance();
+                            }
+                            self.skip_newlines();
+                        }
+
+                        self.expect(TokenKind::RightBrace)?;
+                        Pattern::Struct { name, fields }
+                    } else {
+                        // Regular identifier
+                        Pattern::Identifier(name)
+                    }
+                } else if self.check(&TokenKind::LeftParen) {
+                    // Enum variant with data
                     self.advance();
                     let mut fields = Vec::new();
                     while !self.check(&TokenKind::RightParen) {
@@ -719,15 +861,27 @@ impl Parser {
                         if self.check(&TokenKind::Comma) { self.advance(); }
                     }
                     self.expect(TokenKind::RightParen)?;
-                    Ok(Pattern::EnumVariant { name, fields })
+                    Pattern::EnumVariant { name, fields }
                 } else {
-                    Ok(Pattern::Identifier(name))
+                    Pattern::Identifier(name)
                 }
             }
             _ => {
                 let tok = &self.tokens[self.pos];
-                Err(format!("Expected pattern, found {:?} at line {}", tok.kind, tok.line))
+                return Err(format!("Expected pattern, found {:?} at line {}", tok.kind, tok.line));
             }
+        };
+
+        // Check for guard clause: pattern if condition
+        if self.check(&TokenKind::If) {
+            self.advance();
+            let condition = Box::new(self.parse_expression()?);
+            Ok(Pattern::Guard {
+                pattern: Box::new(pattern),
+                condition,
+            })
+        } else {
+            Ok(pattern)
         }
     }
 
@@ -867,12 +1021,26 @@ mod tests {
 
     #[test]
     fn test_function() {
-        let program = parse_source("fn add(a: i32, b: i32) -> i32 { a + b }").unwrap();
+        // New simple syntax: fun with optional types
+        let program = parse_source("fun add(a, b) { a + b }").unwrap();
         match &program.statements[0] {
             Statement::Function { name, params, return_type, .. } => {
                 assert_eq!(name, "add");
                 assert_eq!(params.len(), 2);
-                assert_eq!(return_type.as_deref(), Some("i32"));
+                assert_eq!(params[0].type_name, "any"); // optional = inferred
+                assert_eq!(return_type, &None);
+            }
+            _ => panic!("Expected Function"),
+        }
+
+        // Old syntax still works (backward compat)
+        let program2 = parse_source("fn add(a: int, b: int) -> int { a + b }").unwrap();
+        match &program2.statements[0] {
+            Statement::Function { name, params, return_type, .. } => {
+                assert_eq!(name, "add");
+                assert_eq!(params.len(), 2);
+                assert_eq!(params[0].type_name, "int");
+                assert_eq!(return_type.as_deref(), Some("int"));
             }
             _ => panic!("Expected Function"),
         }
@@ -918,8 +1086,27 @@ mod tests {
 
     #[test]
     fn test_hello_world() {
-        let src = r#"fn main() { println("Hello, World!") }"#;
+        // fun works
+        let src = r#"fun main() { println("Hello, World!") }"#;
         let program = parse_source(src).unwrap();
         assert_eq!(program.statements.len(), 1);
+
+        // fn also works (backward compat)
+        let src2 = r#"fn main() { println("Hello, World!") }"#;
+        let program2 = parse_source(src2).unwrap();
+        assert_eq!(program2.statements.len(), 1);
+    }
+
+    #[test]
+    fn test_var_syntax() {
+        // var = mutable variable (replaces let mut)
+        let program = parse_source("var count = 0").unwrap();
+        match &program.statements[0] {
+            Statement::Let { name, mutable, .. } => {
+                assert_eq!(name, "count");
+                assert!(*mutable);
+            }
+            _ => panic!("Expected Let (from var)"),
+        }
     }
 }

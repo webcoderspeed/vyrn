@@ -11,8 +11,10 @@ pub enum TokenKind {
     Identifier(String),
 
     // === Keywords ===
-    Fn,
+    Fn,         // fn (alias for fun, backward compat)
+    Fun,        // fun (primary keyword for functions)
     Let,
+    Var,        // var (mutable variable — replaces let mut)
     Mut,
     If,
     Else,
@@ -122,9 +124,11 @@ impl std::fmt::Display for Token {
 /// Look up if an identifier is actually a keyword
 pub fn lookup_keyword(word: &str) -> Option<TokenKind> {
     match word {
-        "fn"       => Some(TokenKind::Fn),
+        "fn"       => Some(TokenKind::Fun),   // fn is alias for fun
+        "fun"      => Some(TokenKind::Fun),   // primary function keyword
         "let"      => Some(TokenKind::Let),
-        "mut"      => Some(TokenKind::Mut),
+        "var"      => Some(TokenKind::Var),   // mutable variable
+        "mut"      => Some(TokenKind::Mut),   // backward compat
         "if"       => Some(TokenKind::If),
         "else"     => Some(TokenKind::Else),
         "match"    => Some(TokenKind::Match),
