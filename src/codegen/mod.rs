@@ -23,6 +23,17 @@ pub enum Value {
         params: Vec<Param>,
         body: Vec<Statement>,
     },
+    /// Enum Type Definition (e.g. enum Color)
+    EnumType {
+        name: String,
+        variants: Vec<String>,
+    },
+    /// Enum Variant Instance (e.g. Color::Red or Option::Some(5))
+    Variant {
+        enum_name: String,
+        variant: String,
+        values: Vec<Value>,
+    },
 }
 
 impl std::fmt::Display for Value {
@@ -50,6 +61,19 @@ impl std::fmt::Display for Value {
             }
             Value::None => write!(f, "None"),
             Value::Function { name, .. } => write!(f, "<fn {}>", name),
+            Value::EnumType { name, .. } => write!(f, "<enum {}>", name),
+            Value::Variant { enum_name, variant, values } => {
+                if values.is_empty() {
+                    write!(f, "{}::{}", enum_name, variant)
+                } else {
+                    write!(f, "{}::{}(", enum_name, variant)?;
+                    for (i, v) in values.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "{}", v)?;
+                    }
+                    write!(f, ")")
+                }
+            }
         }
     }
 }
@@ -252,8 +276,13 @@ impl Interpreter {
                 Ok(Signal::None)
             }
 
-            Statement::Enum { name, .. } => {
-                self.env.define(name, Value::None);
+            Statement::Enum { name, variants } => {
+                let variant_names = variants.iter().map(|v| v.name.clone()).collect();
+                let enum_type = Value::EnumType {
+                    name: name.clone(),
+                    variants: variant_names,
+                };
+                self.env.define(name, enum_type);
                 Ok(Signal::None)
             }
         }
@@ -363,6 +392,8 @@ impl Interpreter {
                                 Value::None => "None",
                                 Value::Function { .. } => "fn",
                                 Value::Struct { .. } => "struct",
+                                Value::EnumType { .. } => "enum",
+                                Value::Variant { .. } => "variant",
                             };
                             return Ok(Value::Str(type_name.to_string()));
                         }
@@ -510,14 +541,26 @@ impl Interpreter {
 
             Expression::MemberAccess { object, member } => {
                 let val = self.eval_expression(object)?;
-                match (&val, member.as_str()) {
-                    (Value::Str(s), "len") => Ok(Value::Int(s.len() as i64)),
-                    (Value::Array(a), "len") => Ok(Value::Int(a.len() as i64)),
-                    (Value::Struct { fields, .. }, name) => {
-                        fields.get(name).cloned()
-                            .ok_or_else(|| format!("Struct has no field '{}'", name))
+                match val {
+                    Value::EnumType { name, variants } => {
+                        if variants.contains(member) {
+                            Ok(Value::Variant {
+                                enum_name: name,
+                                variant: member.clone(),
+                                values: Vec::new(),
+                            })
+                        } else {
+                            Err(format!("Enum '{}' has no variant '{}'", name, member))
+                        }
                     }
-                    _ => Err(format!("Cannot access member '{}' on {:?}", member, val)),
+                    Value::Struct { fields, .. } => {
+                        fields.get(member)
+                            .cloned()
+                            .ok_or_else(|| format!("Struct has no field '{}'", member))
+                    }
+                    Value::Str(s) if member == "len" => Ok(Value::Int(s.len() as i64)),
+                    Value::Array(a) if member == "len" => Ok(Value::Int(a.len() as i64)),
+                    _ => Err(format!("Cannot access member '{}' on {}", member, val)),
                 }
             }
 
@@ -555,8 +598,15 @@ impl Interpreter {
             Expression::Match { value, arms } => {
                 let val = self.eval_expression(value)?;
                 for arm in arms {
-                    if self.pattern_matches(&val, &arm.pattern)? {
-                        return self.eval_expression(&arm.body);
+                    let mut bindings = HashMap::new();
+                    if self.pattern_matches(&val, &arm.pattern, &mut bindings)? {
+                        self.env.push_scope();
+                        for (name, value) in bindings {
+                            self.env.define(&name, value);
+                        }
+                        let result = self.eval_expression(&arm.body);
+                        self.env.pop_scope();
+                        return result;
                     }
                 }
                 Err("Non-exhaustive match: no arm matched".to_string())
@@ -672,6 +722,38 @@ impl Interpreter {
                 BinaryOperator::NotEq => Ok(Value::Bool(a != b)),
                 _ => Err(format!("Cannot apply {:?} to booleans", op)),
             },
+            // Enum Variant equality
+            (Value::Variant { enum_name: e1, variant: v1, values: vals1 }, 
+             Value::Variant { enum_name: e2, variant: v2, values: vals2 }) => {
+                match op {
+                    BinaryOperator::Eq => {
+                        if e1 != e2 || v1 != v2 || vals1.len() != vals2.len() {
+                            Ok(Value::Bool(false))
+                        } else {
+                            // Recursively check values
+                            let mut equal = true;
+                            for (val1, val2) in vals1.iter().zip(vals2.iter()) {
+                                let res = self.eval_binary_op(val1, &BinaryOperator::Eq, val2)?;
+                                if let Value::Bool(b) = res {
+                                    if !b { equal = false; break; }
+                                } else {
+                                    equal = false; break;
+                                }
+                            }
+                            Ok(Value::Bool(equal))
+                        }
+                    }
+                    BinaryOperator::NotEq => {
+                        let eq_res = self.eval_binary_op(left, &BinaryOperator::Eq, right)?;
+                        if let Value::Bool(b) = eq_res {
+                            Ok(Value::Bool(!b))
+                        } else {
+                            Ok(Value::Bool(true))
+                        }
+                    }
+                    _ => Err(format!("Cannot apply {:?} to enum variants", op)),
+                }
+            },
             _ => Err(format!("Type mismatch: cannot apply {:?} to {:?} and {:?}", op, left, right)),
         }
     }
@@ -686,10 +768,14 @@ impl Interpreter {
         }
     }
 
-    fn pattern_matches(&self, value: &Value, pattern: &Pattern) -> Result<bool, String> {
+    fn pattern_matches(&self, value: &Value, pattern: &Pattern, bindings: &mut HashMap<String, Value>) -> Result<bool, String> {
         match pattern {
             Pattern::Wildcard => Ok(true),
-            Pattern::Identifier(_) => Ok(true), // binds to anything
+            Pattern::Identifier(name) => {
+                // Bind value to name
+                bindings.insert(name.clone(), value.clone());
+                Ok(true)
+            }
             Pattern::Literal(expr) => {
                 match (value, expr) {
                     (Value::Int(a), Expression::IntLiteral(b)) => Ok(a == b),
@@ -698,7 +784,31 @@ impl Interpreter {
                     _ => Ok(false),
                 }
             }
-            _ => Ok(false),
+            Pattern::EnumVariant { name: pat_name, fields: pat_fields } => {
+                if let Value::Variant { enum_name, variant, values } = value {
+                    let parts: Vec<&str> = pat_name.split("::").collect();
+                    let (expected_enum, expected_variant) = if parts.len() == 2 {
+                        (Some(parts[0]), parts[1])
+                    } else {
+                        (None, parts[0])
+                    };
+
+                    if let Some(e) = expected_enum {
+                        if e != enum_name { return Ok(false); }
+                    }
+                    if expected_variant != variant { return Ok(false); }
+                    if pat_fields.len() != values.len() { return Ok(false); }
+
+                    for (pat, val) in pat_fields.iter().zip(values.iter()) {
+                        if !self.pattern_matches(val, pat, bindings)? {
+                            return Ok(false);
+                        }
+                    }
+                    Ok(true)
+                } else {
+                    Ok(false)
+                }
+            }
         }
     }
 }

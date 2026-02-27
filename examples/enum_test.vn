@@ -1,0 +1,52 @@
+
+// Define a simple enum
+enum Color {
+    Red,
+    Green,
+    Blue,
+}
+
+// Define an enum with data
+enum Option {
+    Some(i64),
+    None,
+}
+
+// Function to get color name
+fn color_name(c: Color) -> str {
+    match c {
+        Color::Red => "Red",
+        Color::Green => "Green",
+        Color::Blue => "Blue",
+        _ => "Unknown",
+    }
+}
+
+// Function to double value if Some
+fn double_if_some(opt: Option) -> i64 {
+    match opt {
+        Option::Some(val) => val * 2,
+        Option::None => 0,
+        _ => -1,
+    }
+}
+
+// Main execution
+let r = Color::Red
+println("Color is:", color_name(r))
+
+let g = Color::Green
+if g == Color::Green {
+    println("It is Green!")
+}
+
+let s = Option::Some(10)
+println("Some(10) doubled:", double_if_some(s))
+
+let n = Option::None
+println("None doubled:", double_if_some(n))
+
+let s2 = Option::Some(5)
+if s != s2 {
+    println("Some(10) != Some(5)")
+}

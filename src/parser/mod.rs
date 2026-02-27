@@ -481,7 +481,7 @@ impl Parser {
                     function: Box::new(expr),
                     args,
                 };
-            } else if self.check(&TokenKind::Dot) {
+            } else if self.check(&TokenKind::Dot) || self.check(&TokenKind::ColonColon) {
                 self.advance();
                 let member = self.expect_identifier()?;
                 expr = Expression::MemberAccess {
@@ -691,8 +691,16 @@ impl Parser {
                 Ok(Pattern::Wildcard)
             }
             TokenKind::Identifier(ref name) => {
-                let name = name.clone();
+                let mut name = name.clone();
                 self.advance();
+
+                // Check for Enum::Variant syntax
+                if self.check(&TokenKind::ColonColon) {
+                    self.advance();
+                    let variant = self.expect_identifier()?;
+                    // Store as "Enum::Variant"
+                    name = format!("{}::{}", name, variant);
+                }
 
                 // Check for enum variant: Name(fields)
                 if self.check(&TokenKind::LeftParen) {
