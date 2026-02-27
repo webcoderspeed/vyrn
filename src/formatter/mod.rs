@@ -433,6 +433,7 @@ impl Formatter {
                     BinaryOperator::GreaterEq => ">=",
                     BinaryOperator::And => "&&",
                     BinaryOperator::Or => "||",
+                    BinaryOperator::NullCoalesce => "??",
                 };
                 format!(
                     "{} {} {}",

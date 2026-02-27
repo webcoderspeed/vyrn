@@ -193,6 +193,8 @@ impl Lexer {
                 self.advance();
                 if self.match_char('.') {
                     self.add_token(TokenKind::QuestionDot, "?.", line, col);
+                } else if self.match_char('?') {
+                    self.add_token(TokenKind::NullCoalesce, "??", line, col);
                 } else {
                     self.add_token(TokenKind::Question, "?", line, col);
                 }
@@ -200,6 +202,9 @@ impl Lexer {
 
             // === String Literals ===
             '"' => self.scan_string()?,
+
+            // === Template Literals (backtick) ===
+            '`' => self.scan_template_string()?,
 
             // === Number Literals ===
             c if c.is_ascii_digit() => self.scan_number()?,
@@ -393,6 +398,144 @@ impl Lexer {
         };
 
         self.add_token(kind, &ident, line, col);
+    }
+
+    /// Scan a template literal: `hello ${expr} world`
+    /// Desugars into: "hello " + to_str(expr) + " world"
+    /// This way parser/interpreter need zero changes for template strings!
+    fn scan_template_string(&mut self) -> Result<(), String> {
+        let line = self.line;
+        let col = self.column;
+        self.advance(); // skip opening `
+
+        let mut parts: Vec<(String, bool)> = Vec::new(); // (content, is_expr)
+        let mut current_str = String::new();
+
+        while !self.is_at_end() && self.current() != '`' {
+            if self.current() == '$' && self.peek_next() == Some('{') {
+                // Save current string part
+                parts.push((current_str.clone(), false));
+                current_str.clear();
+                self.advance(); // skip $
+                self.advance(); // skip {
+
+                // Collect expression until matching }
+                let mut expr_str = String::new();
+                let mut brace_depth = 1;
+                while !self.is_at_end() && brace_depth > 0 {
+                    if self.current() == '{' { brace_depth += 1; }
+                    if self.current() == '}' { brace_depth -= 1; }
+                    if brace_depth > 0 {
+                        if self.current() == '\n' {
+                            self.line += 1;
+                            self.column = 0;
+                        }
+                        expr_str.push(self.current());
+                        self.advance();
+                    }
+                }
+                if self.is_at_end() && brace_depth > 0 {
+                    return Err(format!("Unterminated template literal expression at line {}", line));
+                }
+                self.advance(); // skip closing }
+                parts.push((expr_str, true));
+            } else if self.current() == '\\' {
+                self.advance();
+                if self.is_at_end() {
+                    return Err(format!("Unterminated template literal at line {}", line));
+                }
+                match self.current() {
+                    'n' => current_str.push('\n'),
+                    't' => current_str.push('\t'),
+                    'r' => current_str.push('\r'),
+                    '\\' => current_str.push('\\'),
+                    '`' => current_str.push('`'),
+                    '$' => current_str.push('$'),
+                    _ => {
+                        current_str.push('\\');
+                        current_str.push(self.current());
+                    }
+                }
+                self.advance();
+            } else {
+                if self.current() == '\n' {
+                    self.line += 1;
+                    self.column = 0;
+                }
+                current_str.push(self.current());
+                self.advance();
+            }
+        }
+
+        if self.is_at_end() {
+            return Err(format!("Unterminated template literal at line {}, column {}", line, col));
+        }
+        self.advance(); // skip closing `
+
+        // Push remaining string
+        parts.push((current_str, false));
+
+        // Now emit tokens: "str" + to_str(expr) + "str" + ...
+        // If no expressions, just emit a single StringLiteral
+        let has_exprs = parts.iter().any(|(_, is_expr)| *is_expr);
+
+        if !has_exprs {
+            // Simple template string with no interpolation → just a string
+            let full: String = parts.iter().map(|(s, _)| s.as_str()).collect();
+            self.add_token(TokenKind::StringLiteral(full.clone()), &format!("`{}`", full), line, col);
+            return Ok(());
+        }
+
+        // Emit: LeftParen, str + to_str(expr) + str + ..., RightParen
+        // Wrap in parens for precedence safety
+        self.add_token(TokenKind::LeftParen, "(", line, col);
+
+        let mut first = true;
+        for (content, is_expr) in &parts {
+            if *is_expr {
+                // Emit: + to_str( <re-lex expression tokens> )
+                if !first {
+                    self.add_token(TokenKind::Plus, "+", line, col);
+                }
+                // Emit to_str(
+                self.add_token(TokenKind::Identifier("to_str".to_string()), "to_str", line, col);
+                self.add_token(TokenKind::LeftParen, "(", line, col);
+
+                // Re-lex the expression inside ${}
+                let mut inner_lexer = Lexer::new(content);
+                let inner_tokens = inner_lexer.tokenize().map_err(|e| {
+                    format!("Error in template expression at line {}: {}", line, e)
+                })?;
+                // Add all tokens except EOF
+                for tok in inner_tokens {
+                    if tok.kind != TokenKind::Eof && tok.kind != TokenKind::Newline {
+                        self.tokens.push(Token::new(tok.kind, tok.lexeme, line, col));
+                    }
+                }
+
+                self.add_token(TokenKind::RightParen, ")", line, col);
+                first = false;
+            } else if !content.is_empty() {
+                if !first {
+                    self.add_token(TokenKind::Plus, "+", line, col);
+                }
+                self.add_token(
+                    TokenKind::StringLiteral(content.clone()),
+                    &format!("\"{}\"", content),
+                    line, col,
+                );
+                first = false;
+            }
+        }
+
+        // If all parts were empty expressions, emit empty string
+        if first {
+            self.add_token(TokenKind::StringLiteral(String::new()), "\"\"", line, col);
+        }
+
+        self.add_token(TokenKind::RightParen, ")", line, col);
+
+        Ok(())
     }
 
     // === Helper methods ===

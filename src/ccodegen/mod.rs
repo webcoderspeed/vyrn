@@ -697,6 +697,7 @@ impl CCodeGen {
             BinaryOperator::GreaterEq => ">=",
             BinaryOperator::And => "&&",
             BinaryOperator::Or => "||",
+            BinaryOperator::NullCoalesce => "??",
         }
     }
 

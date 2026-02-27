@@ -49,6 +49,16 @@ pub enum TokenKind {
     Catch,
     // Some, None, Ok, Err are now standard Identifiers
 
+    // === JS/TS-style aliases (syntax sugar — same AST output) ===
+    Class,       // class (alias for struct + impl combined)
+    Interface,   // interface (alias for trait)
+    Implements,  // implements (used in class X implements Y)
+    Extends,     // extends (future: inheritance)
+    New,         // new (constructor call syntax)
+    Throw,       // throw (alias for panic)
+    Switch,      // switch (alias for match)
+    Null,        // null (alias for none())
+
     // === Operators ===
     Plus,           // +
     Minus,          // -
@@ -78,6 +88,7 @@ pub enum TokenKind {
     PipeArrow,      // |>  (pipe operator!)
     QuestionDot,    // ?.  (safe call)
     Question,       // ?   (error propagation)
+    NullCoalesce,   // ??  (nullish coalescing)
     DotDot,         // ..  (range)
     DotDotEqual,    // ..= (inclusive range)
     FatArrow,       // =>  (match arm)
@@ -159,8 +170,17 @@ pub fn lookup_keyword(word: &str) -> Option<TokenKind> {
         "static"   => Some(TokenKind::Static),
         "mod"      => Some(TokenKind::Mod),
         "where"    => Some(TokenKind::Where),
-        "try"      => Some(TokenKind::Try),
-        "catch"    => Some(TokenKind::Catch),
+        "try"        => Some(TokenKind::Try),
+        "catch"      => Some(TokenKind::Catch),
+        // JS/TS-style aliases
+        "class"      => Some(TokenKind::Class),
+        "interface"  => Some(TokenKind::Interface),
+        "implements" => Some(TokenKind::Implements),
+        "extends"    => Some(TokenKind::Extends),
+        "new"        => Some(TokenKind::New),
+        "throw"      => Some(TokenKind::Throw),
+        "switch"     => Some(TokenKind::Switch),
+        "null"       => Some(TokenKind::Null),
         _ => Option::None,
     }
 }

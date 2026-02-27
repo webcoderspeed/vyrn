@@ -58,6 +58,15 @@ impl Parser {
             TokenKind::Import | TokenKind::Use => self.parse_import(),
             TokenKind::Break => { self.advance(); Ok(Statement::Break) }
             TokenKind::Continue => { self.advance(); Ok(Statement::Continue) }
+            // JS/TS aliases — same AST output!
+            TokenKind::Class => self.parse_class(),
+            TokenKind::Interface => self.parse_interface(),
+            TokenKind::Switch => {
+                // switch is alias for match — parse as expression statement
+                let expr = self.parse_switch_expression()?;
+                Ok(Statement::Expression(expr))
+            }
+            TokenKind::Throw => self.parse_throw(),
             _ => {
                 let expr = self.parse_expression()?;
                 Ok(Statement::Expression(expr))
@@ -83,7 +92,7 @@ impl Parser {
         let params = self.parse_params()?;
         self.expect(TokenKind::RightParen)?;
 
-        let return_type = if self.check(&TokenKind::ThinArrow) {
+        let return_type = if self.check(&TokenKind::ThinArrow) || self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.expect_identifier()?)
         } else {
@@ -108,7 +117,7 @@ impl Parser {
         let params = self.parse_params()?;
         self.expect(TokenKind::RightParen)?;
 
-        let return_type = if self.check(&TokenKind::ThinArrow) {
+        let return_type = if self.check(&TokenKind::ThinArrow) || self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.expect_identifier()?)
         } else {
@@ -471,6 +480,148 @@ impl Parser {
         })
     }
 
+    /// Parse: class User { name: str   fun greet() { } }
+    /// Emits Statement::Struct for fields, Statement::Impl for methods
+    fn parse_class(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Class)?;
+        let name = self.expect_identifier()?;
+
+        // Optional: implements InterfaceName
+        let trait_name = if self.check(&TokenKind::Implements) {
+            self.advance();
+            Some(self.expect_identifier()?)
+        } else {
+            None
+        };
+
+        self.skip_newlines();
+        self.expect(TokenKind::LeftBrace)?;
+        self.skip_newlines();
+
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+
+        while !self.check(&TokenKind::RightBrace) && !self.is_at_end() {
+            if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+                // Parse method
+                self.advance();
+                let method_name = self.expect_identifier()?;
+                self.expect(TokenKind::LeftParen)?;
+                let params = self.parse_params()?;
+                self.expect(TokenKind::RightParen)?;
+
+                let return_type = if self.check(&TokenKind::ThinArrow) || self.check(&TokenKind::Colon) {
+                    self.advance();
+                    Some(self.expect_identifier()?)
+                } else {
+                    None
+                };
+
+                let body = self.parse_block()?;
+                methods.push(ImplMethod { name: method_name, params, return_type, body });
+            } else {
+                // Parse field: name: type
+                let field_name = self.expect_identifier()?;
+                self.expect(TokenKind::Colon)?;
+                let type_name = self.expect_identifier()?;
+                fields.push(Field { name: field_name, type_name });
+            }
+
+            self.skip_newlines();
+            if self.check(&TokenKind::Comma) { self.advance(); }
+            self.skip_newlines();
+        }
+
+        self.expect(TokenKind::RightBrace)?;
+
+        // Emit as Struct if no methods, or as Block(Struct + Impl) if methods exist
+        if methods.is_empty() {
+            Ok(Statement::Struct { name, fields })
+        } else {
+            let mut stmts = vec![Statement::Struct { name: name.clone(), fields }];
+            stmts.push(Statement::Impl { trait_name, type_name: name, methods });
+            Ok(Statement::Expression(Expression::Block(stmts)))
+        }
+    }
+
+    /// Parse: interface Name { fun method() }
+    /// Emits Statement::Trait
+    fn parse_interface(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Interface)?;
+        let name = self.expect_identifier()?;
+        self.skip_newlines();
+        self.expect(TokenKind::LeftBrace)?;
+
+        let mut methods = Vec::new();
+        self.skip_newlines();
+
+        while !self.check(&TokenKind::RightBrace) {
+            if self.check(&TokenKind::Fun) || self.check(&TokenKind::Fn) {
+                self.advance();
+            } else {
+                return Err("Expected 'fun' in interface".to_string());
+            }
+
+            let method_name = self.expect_identifier()?;
+            self.expect(TokenKind::LeftParen)?;
+            let params = self.parse_params()?;
+            self.expect(TokenKind::RightParen)?;
+
+            let return_type = if self.check(&TokenKind::ThinArrow) || self.check(&TokenKind::Colon) {
+                self.advance();
+                Some(self.expect_identifier()?)
+            } else {
+                None
+            };
+
+            methods.push(TraitMethod { name: method_name, params, return_type });
+
+            self.skip_newlines();
+            if self.check(&TokenKind::Comma) { self.advance(); }
+            self.skip_newlines();
+        }
+
+        self.expect(TokenKind::RightBrace)?;
+        Ok(Statement::Trait { name, methods })
+    }
+
+    /// Parse: switch value { pattern => expr, ... }
+    /// Emits Expression::Match
+    fn parse_switch_expression(&mut self) -> Result<Expression, String> {
+        self.expect(TokenKind::Switch)?;
+        let value = Box::new(self.parse_expression()?);
+        self.skip_newlines();
+        self.expect(TokenKind::LeftBrace)?;
+
+        let mut arms = Vec::new();
+        self.skip_newlines();
+
+        while !self.check(&TokenKind::RightBrace) {
+            let pattern = self.parse_pattern()?;
+            self.expect(TokenKind::FatArrow)?;
+            let body = self.parse_expression()?;
+            arms.push(MatchArm { pattern, body });
+
+            self.skip_newlines();
+            if self.check(&TokenKind::Comma) { self.advance(); }
+            self.skip_newlines();
+        }
+
+        self.expect(TokenKind::RightBrace)?;
+        Ok(Expression::Match { value, arms })
+    }
+
+    /// Parse: throw expr
+    /// Emits Call to panic()
+    fn parse_throw(&mut self) -> Result<Statement, String> {
+        self.expect(TokenKind::Throw)?;
+        let expr = self.parse_expression()?;
+        Ok(Statement::Expression(Expression::Call {
+            function: Box::new(Expression::Identifier("panic".to_string())),
+            args: vec![expr],
+        }))
+    }
+
     fn parse_block(&mut self) -> Result<Vec<Statement>, String> {
         self.skip_newlines();
         self.expect(TokenKind::LeftBrace)?;
@@ -544,7 +695,7 @@ impl Parser {
 
     /// Assignment: target = value
     fn parse_assignment(&mut self) -> Result<Expression, String> {
-        let expr = self.parse_or()?;
+        let expr = self.parse_null_coalesce()?;
 
         if self.check(&TokenKind::Equal) {
             self.advance();
@@ -556,6 +707,23 @@ impl Parser {
         }
 
         Ok(expr)
+    }
+
+    /// Nullish coalescing: a ?? b (between assignment and or in precedence)
+    fn parse_null_coalesce(&mut self) -> Result<Expression, String> {
+        let mut left = self.parse_or()?;
+
+        while self.check(&TokenKind::NullCoalesce) {
+            self.advance();
+            let right = self.parse_or()?;
+            left = Expression::BinaryOp {
+                left: Box::new(left),
+                op: BinaryOperator::NullCoalesce,
+                right: Box::new(right),
+            };
+        }
+
+        Ok(left)
     }
 
     /// Logical OR: a || b
@@ -934,7 +1102,18 @@ impl Parser {
                 Ok(Expression::Identifier(name))
             }
             TokenKind::LeftParen => {
-                self.advance();
+                // Check if this is an arrow function: (x, y) => expr
+                // Look ahead to check: after matching parens, is there a =>?
+                let saved_pos = self.pos;
+
+                // Try to parse as arrow function
+                if let Some(arrow_fn) = self.try_parse_arrow_function() {
+                    return Ok(arrow_fn);
+                }
+
+                // Reset and parse as grouped expression
+                self.pos = saved_pos;
+                self.advance(); // skip (
                 let expr = self.parse_expression()?;
                 self.expect(TokenKind::RightParen)?;
                 Ok(expr)
@@ -958,6 +1137,29 @@ impl Parser {
             TokenKind::Pipe => {
                 self.parse_lambda()
             }
+            // JS/TS-style aliases
+            TokenKind::Null => {
+                self.advance();
+                Ok(Expression::Call {
+                    function: Box::new(Expression::Identifier("none".to_string())),
+                    args: vec![],
+                })
+            }
+            TokenKind::Switch => {
+                self.parse_switch_expression()
+            }
+            TokenKind::New => {
+                self.advance();
+                let class_name = self.expect_identifier()?;
+                self.expect(TokenKind::LeftParen)?;
+                let args = self.parse_args()?;
+                self.expect(TokenKind::RightParen)?;
+                // Treat as a function call to ClassName (constructor)
+                Ok(Expression::Call {
+                    function: Box::new(Expression::Identifier(class_name)),
+                    args,
+                })
+            }
             _ => {
                 let tok = &self.tokens[self.pos];
                 Err(format!(
@@ -965,6 +1167,89 @@ impl Parser {
                     tok.kind, tok.lexeme, tok.line, tok.column
                 ))
             }
+        }
+    }
+
+    /// Try to parse an arrow function: (params) => expr or (params) => { stmts }
+    fn try_parse_arrow_function(&mut self) -> Option<Expression> {
+        let saved = self.pos;
+
+        // Try: ( followed by identifiers/commas, then ) =>
+        if !self.check(&TokenKind::LeftParen) { return None; }
+        self.advance(); // skip (
+
+        let mut params = Vec::new();
+
+        // Empty params case: () =>
+        if self.check(&TokenKind::RightParen) {
+            self.advance();
+            if self.check(&TokenKind::FatArrow) {
+                self.advance();
+                if let Ok(body) = self.parse_expression() {
+                    return Some(Expression::Lambda {
+                        params,
+                        body: Box::new(body),
+                    });
+                }
+            }
+            self.pos = saved;
+            return None;
+        }
+
+        // Collect param names
+        loop {
+            match self.current_kind() {
+                TokenKind::Identifier(ref name) => {
+                    params.push(name.clone());
+                    self.advance();
+                }
+                _ => {
+                    self.pos = saved;
+                    return None;
+                }
+            }
+
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        // Expect ) =>
+        if !self.check(&TokenKind::RightParen) {
+            self.pos = saved;
+            return None;
+        }
+        self.advance();
+
+        if !self.check(&TokenKind::FatArrow) {
+            self.pos = saved;
+            return None;
+        }
+        self.advance();
+
+        // Parse body — can be a single expression or a block
+        if self.check(&TokenKind::LeftBrace) {
+            // Multi-line arrow: (x) => { stmts; expr }
+            if let Ok(body_stmts) = self.parse_block() {
+                return Some(Expression::Lambda {
+                    params,
+                    body: Box::new(Expression::Block(body_stmts)),
+                });
+            }
+            self.pos = saved;
+            return None;
+        }
+
+        if let Ok(body) = self.parse_expression() {
+            Some(Expression::Lambda {
+                params,
+                body: Box::new(body),
+            })
+        } else {
+            self.pos = saved;
+            None
         }
     }
 

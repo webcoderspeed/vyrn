@@ -962,7 +962,7 @@ impl TypeChecker {
                 }
             }
 
-            BinaryOperator::And | BinaryOperator::Or => {
+            BinaryOperator::And | BinaryOperator::Or | BinaryOperator::NullCoalesce => {
                 match (left_type, right_type) {
                     (VrynType::Bool, VrynType::Bool) => Ok(VrynType::Bool),
                     (VrynType::Any, _) | (_, VrynType::Any) => Ok(VrynType::Bool),

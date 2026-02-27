@@ -289,8 +289,9 @@ pub enum BinaryOperator {
     Greater,    // >
     LessEq,     // <=
     GreaterEq,  // >=
-    And,        // &&
-    Or,         // ||
+    And,            // &&
+    Or,             // ||
+    NullCoalesce,   // ?? (nullish coalescing — JS/TS style)
 }
 
 #[derive(Debug, Clone)]

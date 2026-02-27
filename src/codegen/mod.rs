@@ -477,6 +477,15 @@ impl Interpreter {
             }
 
             Expression::BinaryOp { left, op, right } => {
+                // Handle NullCoalesce early (short-circuit evaluation)
+                if matches!(op, BinaryOperator::NullCoalesce) {
+                    let left_val = self.eval_expression(left)?;
+                    if matches!(left_val, Value::None) {
+                        return self.eval_expression(right);
+                    }
+                    return Ok(left_val);
+                }
+                
                 let l = self.eval_expression(left)?;
                 let r = self.eval_expression(right)?;
                 self.eval_binary_op(&l, op, &r)
@@ -3957,7 +3966,287 @@ impl Interpreter {
 
             Expression::MethodCall { object, method, args } => {
                 let obj_val = self.eval_expression(object)?;
-                
+
+                // === JS/TS-style method chaining on arrays ===
+                if let Value::Array(ref arr_items) = obj_val {
+                    let arr_clone = arr_items.clone();
+                    match method.as_str() {
+                        "map" => {
+                            if args.is_empty() { return Err("map() requires a function argument".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            let mut result = Vec::new();
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if let Some(p) = params.first() { self.env.define(&p.name, item.clone(), false); }
+                                        let mut val = Value::None;
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(v) => { val = v; break; } _ => {} } }
+                                        self.env.pop_scope();
+                                        result.push(val);
+                                    }
+                                    _ => return Err("map() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(Value::Array(result));
+                        }
+                        "filter" => {
+                            if args.is_empty() { return Err("filter() requires a function argument".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            let mut result = Vec::new();
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if let Some(p) = params.first() { self.env.define(&p.name, item.clone(), false); }
+                                        let mut val = Value::None;
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(v) => { val = v; break; } _ => {} } }
+                                        self.env.pop_scope();
+                                        if matches!(val, Value::Bool(true)) { result.push(item); }
+                                    }
+                                    _ => return Err("filter() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(Value::Array(result));
+                        }
+                        "reduce" => {
+                            if args.len() < 2 { return Err("reduce() requires (fn, initial) arguments".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            let mut acc = self.eval_expression(&args[1])?;
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if params.len() >= 1 { self.env.define(&params[0].name, acc.clone(), false); }
+                                        if params.len() >= 2 { self.env.define(&params[1].name, item.clone(), false); }
+                                        let mut val = Value::None;
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(v) => { val = v; break; } _ => {} } }
+                                        self.env.pop_scope();
+                                        acc = val;
+                                    }
+                                    _ => return Err("reduce() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(acc);
+                        }
+                        "find" => {
+                            if args.is_empty() { return Err("find() requires a function argument".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if let Some(p) = params.first() { self.env.define(&p.name, item.clone(), false); }
+                                        let mut val = Value::None;
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(v) => { val = v; break; } _ => {} } }
+                                        self.env.pop_scope();
+                                        if matches!(val, Value::Bool(true)) { return Ok(item); }
+                                    }
+                                    _ => return Err("find() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(Value::None);
+                        }
+                        "any" => {
+                            if args.is_empty() { return Err("any() requires a function argument".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if let Some(p) = params.first() { self.env.define(&p.name, item.clone(), false); }
+                                        let mut val = Value::None;
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(v) => { val = v; break; } _ => {} } }
+                                        self.env.pop_scope();
+                                        if matches!(val, Value::Bool(true)) { return Ok(Value::Bool(true)); }
+                                    }
+                                    _ => return Err("any() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(Value::Bool(false));
+                        }
+                        "all" => {
+                            if args.is_empty() { return Err("all() requires a function argument".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if let Some(p) = params.first() { self.env.define(&p.name, item.clone(), false); }
+                                        let mut val = Value::None;
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(v) => { val = v; break; } _ => {} } }
+                                        self.env.pop_scope();
+                                        if !matches!(val, Value::Bool(true)) { return Ok(Value::Bool(false)); }
+                                    }
+                                    _ => return Err("all() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(Value::Bool(true));
+                        }
+                        "forEach" => {
+                            if args.is_empty() { return Err("forEach() requires a function argument".to_string()); }
+                            let func = self.eval_expression(&args[0])?;
+                            for item in arr_clone {
+                                match &func {
+                                    Value::Function { params, body, .. } => {
+                                        self.env.push_scope();
+                                        if let Some(p) = params.first() { self.env.define(&p.name, item.clone(), false); }
+                                        for stmt in body { match self.exec_statement(stmt)? { Signal::Return(_) => { break; } _ => {} } }
+                                        self.env.pop_scope();
+                                    }
+                                    _ => return Err("forEach() argument must be a function".to_string()),
+                                }
+                            }
+                            return Ok(Value::None);
+                        }
+                        "length" => { return Ok(Value::Int(arr_clone.len() as i64)); }
+                        "push" => {
+                            let mut new_arr = arr_clone;
+                            for arg in args { new_arr.push(self.eval_expression(arg)?); }
+                            return Ok(Value::Array(new_arr));
+                        }
+                        "pop" => {
+                            let mut new_arr = arr_clone;
+                            let popped = new_arr.pop().unwrap_or(Value::None);
+                            return Ok(popped);
+                        }
+                        "reverse" => {
+                            let mut new_arr = arr_clone;
+                            new_arr.reverse();
+                            return Ok(Value::Array(new_arr));
+                        }
+                        "sort" => {
+                            let mut new_arr = arr_clone;
+                            new_arr.sort_by(|a, b| format!("{}", a).cmp(&format!("{}", b)));
+                            return Ok(Value::Array(new_arr));
+                        }
+                        "join" => {
+                            let sep = if !args.is_empty() {
+                                match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) }
+                            } else { ",".to_string() };
+                            let joined: String = arr_clone.iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join(&sep);
+                            return Ok(Value::Str(joined));
+                        }
+                        "includes" | "contains" => {
+                            if args.is_empty() { return Err("contains() requires an argument".to_string()); }
+                            let target = self.eval_expression(&args[0])?;
+                            let found = arr_clone.iter().any(|v| format!("{}", v) == format!("{}", target));
+                            return Ok(Value::Bool(found));
+                        }
+                        "slice" => {
+                            let start = if !args.is_empty() { match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => 0 } } else { 0 };
+                            let end = if args.len() > 1 { match self.eval_expression(&args[1])? { Value::Int(n) => n as usize, _ => arr_clone.len() } } else { arr_clone.len() };
+                            let sliced = arr_clone[start..end.min(arr_clone.len())].to_vec();
+                            return Ok(Value::Array(sliced));
+                        }
+                        "flat" | "flatten" => {
+                            let mut result = Vec::new();
+                            for item in arr_clone { match item { Value::Array(inner) => result.extend(inner), other => result.push(other), } }
+                            return Ok(Value::Array(result));
+                        }
+                        _ => {} // fall through to impl_methods lookup
+                    }
+                }
+
+                // === JS/TS-style method chaining on strings ===
+                if let Value::Str(ref s) = obj_val {
+                    let s_clone = s.clone();
+                    match method.as_str() {
+                        "length" => { return Ok(Value::Int(s_clone.len() as i64)); }
+                        "upper" | "toUpperCase" => { return Ok(Value::Str(s_clone.to_uppercase())); }
+                        "lower" | "toLowerCase" => { return Ok(Value::Str(s_clone.to_lowercase())); }
+                        "trim" => { return Ok(Value::Str(s_clone.trim().to_string())); }
+                        "trimStart" => { return Ok(Value::Str(s_clone.trim_start().to_string())); }
+                        "trimEnd" => { return Ok(Value::Str(s_clone.trim_end().to_string())); }
+                        "split" => {
+                            let sep = if !args.is_empty() {
+                                match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) }
+                            } else { " ".to_string() };
+                            let parts: Vec<Value> = s_clone.split(&sep).map(|p| Value::Str(p.to_string())).collect();
+                            return Ok(Value::Array(parts));
+                        }
+                        "replace" => {
+                            if args.len() < 2 { return Err("replace() requires (from, to) arguments".to_string()); }
+                            let from = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) };
+                            let to = match self.eval_expression(&args[1])? { Value::Str(s) => s, v => format!("{}", v) };
+                            return Ok(Value::Str(s_clone.replace(&from, &to)));
+                        }
+                        "replaceAll" => {
+                            if args.len() < 2 { return Err("replaceAll() requires (from, to) arguments".to_string()); }
+                            let from = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) };
+                            let to = match self.eval_expression(&args[1])? { Value::Str(s) => s, v => format!("{}", v) };
+                            return Ok(Value::Str(s_clone.replace(&from, &to)));
+                        }
+                        "startsWith" | "starts_with" => {
+                            if args.is_empty() { return Err("startsWith() requires an argument".to_string()); }
+                            let prefix = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) };
+                            return Ok(Value::Bool(s_clone.starts_with(&prefix)));
+                        }
+                        "endsWith" | "ends_with" => {
+                            if args.is_empty() { return Err("endsWith() requires an argument".to_string()); }
+                            let suffix = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) };
+                            return Ok(Value::Bool(s_clone.ends_with(&suffix)));
+                        }
+                        "includes" | "contains" => {
+                            if args.is_empty() { return Err("includes() requires an argument".to_string()); }
+                            let substr = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) };
+                            return Ok(Value::Bool(s_clone.contains(&substr)));
+                        }
+                        "indexOf" | "index_of" => {
+                            if args.is_empty() { return Err("indexOf() requires an argument".to_string()); }
+                            let substr = match self.eval_expression(&args[0])? { Value::Str(s) => s, v => format!("{}", v) };
+                            let idx = s_clone.find(&substr).map(|i| i as i64).unwrap_or(-1);
+                            return Ok(Value::Int(idx));
+                        }
+                        "charAt" | "char_at" => {
+                            if args.is_empty() { return Err("charAt() requires an index".to_string()); }
+                            let idx = match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => 0 };
+                            let ch = s_clone.chars().nth(idx).map(|c| Value::Str(c.to_string())).unwrap_or(Value::Str(String::new()));
+                            return Ok(ch);
+                        }
+                        "substring" | "slice" => {
+                            let start = if !args.is_empty() { match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => 0 } } else { 0 };
+                            let end = if args.len() > 1 { match self.eval_expression(&args[1])? { Value::Int(n) => n as usize, _ => s_clone.len() } } else { s_clone.len() };
+                            let chars: Vec<char> = s_clone.chars().collect();
+                            let sliced: String = chars[start..end.min(chars.len())].iter().collect();
+                            return Ok(Value::Str(sliced));
+                        }
+                        "repeat" => {
+                            if args.is_empty() { return Err("repeat() requires a count".to_string()); }
+                            let count = match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => 1 };
+                            return Ok(Value::Str(s_clone.repeat(count)));
+                        }
+                        "padStart" | "pad_start" => {
+                            if args.is_empty() { return Err("padStart() requires a length".to_string()); }
+                            let len = match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => 0 };
+                            let pad_char = if args.len() > 1 { match self.eval_expression(&args[1])? { Value::Str(s) => s.chars().next().unwrap_or(' '), _ => ' ' } } else { ' ' };
+                            if s_clone.len() >= len { return Ok(Value::Str(s_clone)); }
+                            let padding: String = std::iter::repeat(pad_char).take(len - s_clone.len()).collect();
+                            return Ok(Value::Str(format!("{}{}", padding, s_clone)));
+                        }
+                        "padEnd" | "pad_end" => {
+                            if args.is_empty() { return Err("padEnd() requires a length".to_string()); }
+                            let len = match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => 0 };
+                            let pad_char = if args.len() > 1 { match self.eval_expression(&args[1])? { Value::Str(s) => s.chars().next().unwrap_or(' '), _ => ' ' } } else { ' ' };
+                            if s_clone.len() >= len { return Ok(Value::Str(s_clone)); }
+                            let padding: String = std::iter::repeat(pad_char).take(len - s_clone.len()).collect();
+                            return Ok(Value::Str(format!("{}{}", s_clone, padding)));
+                        }
+                        "reverse" => {
+                            return Ok(Value::Str(s_clone.chars().rev().collect()));
+                        }
+                        "capitalize" => {
+                            let mut chars = s_clone.chars();
+                            let capitalized = match chars.next() {
+                                Some(c) => c.to_uppercase().to_string() + &chars.as_str().to_lowercase(),
+                                None => String::new(),
+                            };
+                            return Ok(Value::Str(capitalized));
+                        }
+                        _ => {} // fall through to impl_methods lookup
+                    }
+                }
+
                 // Get the type name of the object
                 let type_name = match &obj_val {
                     Value::Struct { name, .. } => name.clone(),
@@ -3968,11 +4257,11 @@ impl Interpreter {
                     Value::Array(_) => "array".to_string(),
                     _ => return Err(format!("Cannot call method on {}", obj_val)),
                 };
-                
+
                 // Look up the method in impl_methods and clone it to avoid borrow issues
                 let key = (type_name.clone(), method.clone());
                 let impl_method_clone = self.impl_methods.get(&key).and_then(|mv| mv.first().cloned());
-                
+
                 if let Some(impl_method) = impl_method_clone {
                     // Evaluate arguments
                     let arg_vals: Result<Vec<_>, _> = args.iter()
@@ -8220,6 +8509,507 @@ line3"
         assert_eq!(output[0], "true");
     }
 
+    // =====================================================
+    //  JS/TS SYNTAX SUGAR TESTS — v0.6.0
+    // =====================================================
+
+    // --- class keyword ---
+    #[test]
+    fn test_class_basic() {
+        let (result, output) = run_vryn(r#"
+            class Point {
+                x: int,
+                y: int,
+            }
+            let p = Point { x: 10, y: 20 }
+            println(p.x)
+            println(p.y)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+        assert_eq!(output[1], "20");
+    }
+
+    #[test]
+    fn test_class_with_methods() {
+        let (result, output) = run_vryn(r#"
+            class Dog {
+                name: str,
+
+                fun bark(self) {
+                    println(self.name + " says Woof!")
+                }
+            }
+            let d = Dog { name: "Bruno" }
+            d.bark()
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Bruno says Woof!");
+    }
+
+    // --- interface keyword ---
+    #[test]
+    fn test_interface() {
+        let (result, output) = run_vryn(r#"
+            interface Greeter {
+                fun greet(self)
+            }
+            struct Bot {
+                name: str,
+            }
+            impl Bot {
+                fun greet(self) {
+                    println("Hello from " + self.name)
+                }
+            }
+            let b = Bot { name: "Vryn" }
+            b.greet()
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Hello from Vryn");
+    }
+
+    // --- switch keyword (alias for match) ---
+    #[test]
+    fn test_switch_expression() {
+        let (result, output) = run_vryn(r#"
+            let x = 2
+            let result = switch x {
+                1 => "one",
+                2 => "two",
+                3 => "three",
+                _ => "other",
+            }
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "two");
+    }
+
+    // --- throw keyword (alias for panic) ---
+    #[test]
+    fn test_throw_catch() {
+        let (result, output) = run_vryn(r#"
+            try {
+                throw "Something went wrong!"
+            } catch e {
+                println(e)
+            }
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Panic: Something went wrong!");
+    }
+
+    // --- null keyword (alias for none()) ---
+    #[test]
+    fn test_null_keyword() {
+        let (result, output) = run_vryn(r#"
+            let x = null
+            println(is_none(x))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    // --- arrow functions ---
+    #[test]
+    fn test_arrow_function_single_param() {
+        let (result, output) = run_vryn(r#"
+            let double = (x) => x * 2
+            println(double(5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    #[test]
+    fn test_arrow_function_multi_param() {
+        let (result, output) = run_vryn(r#"
+            let add = (a, b) => a + b
+            println(add(3, 7))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    #[test]
+    fn test_arrow_function_no_param() {
+        let (result, output) = run_vryn(r#"
+            let greet = () => "Namaste!"
+            println(greet())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Namaste!");
+    }
+
+    // --- template literals ---
+    #[test]
+    fn test_template_literal_basic() {
+        let (result, output) = run_vryn(r#"
+            let name = "Sanjeev"
+            println(`Hello ${name}!`)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Hello Sanjeev!");
+    }
+
+    #[test]
+    fn test_template_literal_expression() {
+        let (result, output) = run_vryn(r#"
+            let a = 10
+            let b = 20
+            println(`Sum: ${a + b}`)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Sum: 30");
+    }
+
+    #[test]
+    fn test_template_literal_no_interpolation() {
+        let (result, output) = run_vryn(r#"
+            println(`Hello World!`)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Hello World!");
+    }
+
+    // --- nullish coalescing ?? ---
+    #[test]
+    fn test_null_coalesce_with_none() {
+        let (result, output) = run_vryn(r#"
+            let x = none()
+            let y = x ?? "default"
+            println(y)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "default");
+    }
+
+    #[test]
+    fn test_null_coalesce_with_value() {
+        let (result, output) = run_vryn(r#"
+            let x = "hello"
+            let y = x ?? "default"
+            println(y)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_null_keyword_coalesce() {
+        let (result, output) = run_vryn(r#"
+            let x = null
+            let y = x ?? 42
+            println(y)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    // --- method chaining on arrays ---
+    #[test]
+    fn test_array_map_method() {
+        let (result, output) = run_vryn(r#"
+            let nums = [1, 2, 3, 4, 5]
+            let doubled = nums.map(|x| x * 2)
+            println(doubled)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[2, 4, 6, 8, 10]");
+    }
+
+    #[test]
+    fn test_array_filter_method() {
+        let (result, output) = run_vryn(r#"
+            let nums = [1, 2, 3, 4, 5, 6]
+            let evens = nums.filter(|x| x % 2 == 0)
+            println(evens)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[2, 4, 6]");
+    }
+
+    #[test]
+    fn test_array_reduce_method() {
+        let (result, output) = run_vryn(r#"
+            let nums = [1, 2, 3, 4, 5]
+            let total = nums.reduce(|acc, x| acc + x, 0)
+            println(total)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "15");
+    }
+
+    #[test]
+    fn test_array_method_chaining() {
+        let (result, output) = run_vryn(r#"
+            let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            let result = nums.filter(|x| x % 2 == 0).map(|x| x * x)
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[4, 16, 36, 64, 100]");
+    }
+
+    #[test]
+    fn test_array_find_method() {
+        let (result, output) = run_vryn(r#"
+            let nums = [10, 20, 30, 40]
+            let found = nums.find(|x| x > 25)
+            println(found)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "30");
+    }
+
+    #[test]
+    fn test_array_any_all_methods() {
+        let (result, output) = run_vryn(r#"
+            let nums = [2, 4, 6, 8]
+            println(nums.any(|x| x > 5))
+            println(nums.all(|x| x % 2 == 0))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "true");
+    }
+
+    #[test]
+    fn test_array_join_method() {
+        let (result, output) = run_vryn(r#"
+            let fruits = ["Mango", "Apple", "Guava"]
+            println(fruits.join(", "))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Mango, Apple, Guava");
+    }
+
+    #[test]
+    fn test_array_includes_method() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            println(arr.includes(2))
+            println(arr.includes(5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+
+    #[test]
+    fn test_array_reverse_method() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3]
+            println(arr.reverse())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[3, 2, 1]");
+    }
+
+    #[test]
+    fn test_array_flatten_method() {
+        let (result, output) = run_vryn(r#"
+            let arr = [[1, 2], [3, 4], [5]]
+            println(arr.flatten())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[1, 2, 3, 4, 5]");
+    }
+
+    #[test]
+    fn test_array_length_method() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            println(arr.length())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+    }
+
+    // --- method chaining on strings ---
+    #[test]
+    fn test_string_upper_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello"
+            println(s.upper())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "HELLO");
+    }
+
+    #[test]
+    fn test_string_lower_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "HELLO"
+            println(s.lower())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_string_trim_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "  hello  "
+            println(s.trim())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_string_split_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "a,b,c"
+            println(s.split(","))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[a, b, c]");
+    }
+
+    #[test]
+    fn test_string_replace_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(s.replace("world", "Vryn"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello Vryn");
+    }
+
+    #[test]
+    fn test_string_startsWith_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(s.startsWith("hello"))
+            println(s.startsWith("world"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+
+    #[test]
+    fn test_string_includes_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(s.includes("world"))
+            println(s.includes("xyz"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+
+    #[test]
+    fn test_string_repeat_method() {
+        let (result, output) = run_vryn(r#"
+            let s = "ha"
+            println(s.repeat(3))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hahaha");
+    }
+
+    #[test]
+    fn test_string_chaining() {
+        let (result, output) = run_vryn(r#"
+            let s = "  Hello World  "
+            println(s.trim().upper())
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "HELLO WORLD");
+    }
+
+    // --- return type with colon ---
+    #[test]
+    fn test_return_type_colon_syntax() {
+        let (result, output) = run_vryn(r#"
+            fun add(a: int, b: int): int {
+                return a + b
+            }
+            println(add(3, 7))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "10");
+    }
+
+    // --- arrow + method chaining combo ---
+    #[test]
+    fn test_arrow_with_method_chaining() {
+        let (result, output) = run_vryn(r#"
+            let nums = [1, 2, 3, 4, 5]
+            let result = nums.map((x) => x * 3).filter((x) => x > 6)
+            println(result)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "[9, 12, 15]");
+    }
+
+    // --- backward compatibility tests ---
+    #[test]
+    fn test_struct_still_works() {
+        let (result, output) = run_vryn(r#"
+            struct Point {
+                x: int,
+                y: int,
+            }
+            let p = Point { x: 5, y: 10 }
+            println(p.x + p.y)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "15");
+    }
+
+    #[test]
+    fn test_trait_still_works() {
+        let (result, output) = run_vryn(r#"
+            trait Speak {
+                fun speak(self)
+            }
+            println("trait defined ok")
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "trait defined ok");
+    }
+
+    #[test]
+    fn test_match_still_works() {
+        let (result, output) = run_vryn(r#"
+            let x = 42
+            let r = match x {
+                1 => "one",
+                42 => "answer",
+                _ => "other",
+            }
+            println(r)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "answer");
+    }
+
+    #[test]
+    fn test_pipe_lambda_still_works() {
+        let (result, output) = run_vryn(r#"
+            let sq = |x| x * x
+            println(sq(7))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "49");
+    }
+
+    #[test]
+    fn test_arrow_return_type_still_works() {
+        let (result, output) = run_vryn(r#"
+            fun mul(a: int, b: int) -> int {
+                return a * b
+            }
+            println(mul(6, 7))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
 
 
 }

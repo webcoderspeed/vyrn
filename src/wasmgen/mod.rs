@@ -268,6 +268,7 @@ impl WasmCodeGen {
             BinaryOperator::GreaterEq => "i32.ge_s",
             BinaryOperator::And => "i32.and",
             BinaryOperator::Or => "i32.or",
+            BinaryOperator::NullCoalesce => "i32.or",
         };
         
         result.push_str(&format!("    {}\n", op_str));
