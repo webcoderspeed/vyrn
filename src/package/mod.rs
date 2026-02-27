@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 /// Represents a Vryn package with metadata and dependencies
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub struct VrynPackage {
     pub name: String,
     pub version: String,
@@ -13,6 +14,7 @@ pub struct VrynPackage {
 
 impl VrynPackage {
     /// Create a new VrynPackage with given name and version
+    #[allow(dead_code)]
     pub fn new(name: String, version: String) -> Self {
         VrynPackage {
             name,
@@ -26,6 +28,7 @@ impl VrynPackage {
 }
 
 /// Parse a vryn.toml format string into a VrynPackage
+#[allow(dead_code)]
 pub fn parse_vryn_toml(content: &str) -> Result<VrynPackage, String> {
     let mut package = VrynPackage::new("unknown".to_string(), "0.0.0".to_string());
     let mut in_package_section = false;
@@ -101,6 +104,7 @@ pub fn parse_vryn_toml(content: &str) -> Result<VrynPackage, String> {
 }
 
 /// Generate a vryn.toml formatted string from a VrynPackage
+#[allow(dead_code)]
 pub fn generate_vryn_toml(package: &VrynPackage) -> String {
     let mut toml = String::from("[package]\n");
     toml.push_str(&format!("name = \"{}\"\n", package.name));

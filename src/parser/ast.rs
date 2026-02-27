@@ -261,6 +261,7 @@ pub enum Pattern {
         fields: Vec<(String, Pattern)>,
     },
     /// Range pattern: 0..10 or 0..=10
+    #[allow(dead_code)]
     Range {
         start: Box<Expression>,
         end: Box<Expression>,

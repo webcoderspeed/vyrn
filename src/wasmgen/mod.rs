@@ -48,7 +48,7 @@ impl WasmCodeGen {
             Statement::Expression(expr) => {
                 self.gen_expr(expr);
             }
-            Statement::If { condition, then_body, else_body } => {
+            Statement::If { condition: _, then_body, else_body } => {
                 self.indent_level += 1;
                 self.output.push_str(&self.indent());
                 self.output.push_str("(if\n");
@@ -116,7 +116,7 @@ impl WasmCodeGen {
                 self.output.push_str(")\n");
                 self.indent_level -= 1;
             }
-            Statement::For { var, iterable, body } => {
+            Statement::For { var, iterable: _, body } => {
                 // Generate WAT for-loop structure using block and loop
                 self.indent_level += 1;
                 self.output.push_str(&self.indent());
@@ -274,6 +274,7 @@ impl WasmCodeGen {
         result
     }
 
+    #[allow(dead_code)]
     pub fn finalize(&mut self) -> String {
         let mut final_output = "(module\n".to_string();
         for func in &self.functions {

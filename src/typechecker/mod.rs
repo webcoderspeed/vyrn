@@ -37,6 +37,7 @@ pub enum VrynType {
     /// Any type (for unresolved/unannotated variables)
     Any,
     /// Unknown type (used internally for error recovery)
+    #[allow(dead_code)]
     Unknown,
     /// Error type (indicates a type error occurred)
     Error,
@@ -86,6 +87,7 @@ impl VrynType {
     }
 
     /// Check if type can be converted to another type
+    #[allow(dead_code)]
     pub fn can_convert_to(&self, target: &VrynType) -> bool {
         self.is_compatible_with(target)
     }
@@ -116,6 +118,7 @@ impl TypeError {
         TypeError { message, line: None }
     }
 
+    #[allow(dead_code)]
     pub fn with_line(message: String, line: usize) -> Self {
         TypeError { message, line: Some(line) }
     }
@@ -560,13 +563,6 @@ impl TypeChecker {
                 Ok(())
             }
 
-            Statement::Const { name: _, value } => {
-                // Constants must have a value that can be evaluated at compile time
-                // For now, we just type check the expression
-                let _value_type = self.infer_expr(value)?;
-                Ok(())
-            }
-
             Statement::Import { path: _, alias: _ } => {
                 // Import statements are checked during first pass
                 Ok(())
@@ -889,7 +885,7 @@ impl TypeChecker {
                 Ok(VrynType::Any)
             }
 
-            Expression::MethodCall { object, method, args } => {
+            Expression::MethodCall { object, method: _, args } => {
                 // For now, just check that the object and args are valid
                 let _obj_type = self.infer_expr(object)?;
                 for arg in args {

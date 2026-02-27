@@ -40,7 +40,6 @@ pub enum Value {
         value: Box<Value>,
     },
     /// Future type: represents an async computation
-    #[allow(dead_code)]
     Future {
         params: Vec<Param>,
         body: Vec<Statement>,
@@ -48,7 +47,6 @@ pub enum Value {
         resolved_value: Option<Box<Value>>,
     },
     /// Channel type: for sending/receiving values between tasks
-    #[allow(dead_code)]
     Channel {
         id: usize,
         messages: Vec<Value>,
@@ -170,7 +168,6 @@ impl Environment {
     }
 
     /// Check if a variable is mutable
-    #[allow(dead_code)]
     pub fn is_mutable(&self, name: &str) -> bool {
         for scope in self.scopes.iter().rev() {
             if let Some(var) = scope.get(name) {
@@ -223,7 +220,6 @@ impl Interpreter {
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_output(&self) -> &Vec<String> {
         &self.output
     }
@@ -1797,8 +1793,6 @@ impl Interpreter {
         }
         _ => Err("html_escape() requires a string".to_string()),
     };
-}
-
 
 // ============ PHASE 35: AI/ML & Scientific Computing ============
 
@@ -2411,991 +2405,652 @@ impl Interpreter {
     }
     return Ok(Value::Array(result));
 }
-
-// ===== Phase 31: Database & Data Functions =====
-
-"csv_parse" => {
-    if args.len() != 1 { return Err("csv_parse() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("csv_parse() expects a string".to_string()),
+// ============ PHASE 33: Cross-Compilation & Embedded ============
+"platform_os" => {
+    if !args.is_empty() {
+        return Err("platform_os() takes no arguments".to_string());
+    }
+    let os = if cfg!(target_os = "linux") {
+        "linux"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "unknown"
     };
-    let mut rows = Vec::new();
-    for line in s.lines() {
-        let mut cols = Vec::new();
-        let mut current = String::new();
-        let mut in_quotes = false;
-        for ch in line.chars() {
-            if ch == '"' {
-                in_quotes = !in_quotes;
-            } else if ch == ',' && !in_quotes {
-                cols.push(Value::Str(current.clone()));
-                current.clear();
-            } else {
-                current.push(ch);
+    return Ok(Value::Str(os.to_string()));
+}
+
+"platform_arch" => {
+    if !args.is_empty() {
+        return Err("platform_arch() takes no arguments".to_string());
+    }
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else if cfg!(target_arch = "x86") {
+        "x86"
+    } else if cfg!(target_arch = "arm") {
+        "arm"
+    } else {
+        "unknown"
+    };
+    return Ok(Value::Str(arch.to_string()));
+}
+
+"platform_family" => {
+    if !args.is_empty() {
+        return Err("platform_family() takes no arguments".to_string());
+    }
+    let family = if cfg!(target_family = "unix") {
+        "unix"
+    } else if cfg!(target_family = "wasm") {
+        "wasm"
+    } else if cfg!(target_family = "windows") {
+        "windows"
+    } else {
+        "unknown"
+    };
+    return Ok(Value::Str(family.to_string()));
+}
+
+"platform_endian" => {
+    if !args.is_empty() {
+        return Err("platform_endian() takes no arguments".to_string());
+    }
+    let endian = if cfg!(target_pointer_width = "64") {
+        if cfg!(target_endian = "little") {
+            "little"
+        } else {
+            "big"
+        }
+    } else {
+        if cfg!(target_endian = "little") {
+            "little"
+        } else {
+            "big"
+        }
+    };
+    return Ok(Value::Str(endian.to_string()));
+}
+
+"platform_pointer_size" => {
+    if !args.is_empty() {
+        return Err("platform_pointer_size() takes no arguments".to_string());
+    }
+    let size = if cfg!(target_pointer_width = "64") {
+        8i64
+    } else {
+        4i64
+    };
+    return Ok(Value::Int(size));
+}
+
+"platform_cores" => {
+    if !args.is_empty() {
+        return Err("platform_cores() takes no arguments".to_string());
+    }
+    // In interpreter, simulated to 1 (single-threaded)
+    return Ok(Value::Int(1));
+}
+
+"sizeof" => {
+    if args.len() != 1 {
+        return Err("sizeof() takes exactly 1 argument".to_string());
+    }
+    let type_str = self.eval_expression(&args[0])?;
+    return match type_str {
+        Value::Str(type_name) => {
+            let size = match type_name.as_str() {
+                "int" => 8i64,
+                "float" => 8i64,
+                "bool" => 1i64,
+                "str" => if cfg!(target_pointer_width = "64") { 8i64 } else { 4i64 },
+                "char" => 1i64,
+                _ => return Err(format!("sizeof() unknown type: {}", type_name)),
+            };
+            Ok(Value::Int(size))
+        }
+        _ => Err("sizeof() requires a string type name".to_string()),
+    };
+}
+
+"bitwise_and" => {
+    if args.len() != 2 {
+        return Err("bitwise_and() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x & y)),
+        _ => Err("bitwise_and() requires two integers".to_string()),
+    };
+}
+
+"bitwise_or" => {
+    if args.len() != 2 {
+        return Err("bitwise_or() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x | y)),
+        _ => Err("bitwise_or() requires two integers".to_string()),
+    };
+}
+
+"bitwise_xor" => {
+    if args.len() != 2 {
+        return Err("bitwise_xor() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let b = self.eval_expression(&args[1])?;
+    return match (a, b) {
+        (Value::Int(x), Value::Int(y)) => Ok(Value::Int(x ^ y)),
+        _ => Err("bitwise_xor() requires two integers".to_string()),
+    };
+}
+
+"bitwise_not" => {
+    if args.len() != 1 {
+        return Err("bitwise_not() takes exactly 1 argument".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    return match a {
+        Value::Int(x) => Ok(Value::Int(!x)),
+        _ => Err("bitwise_not() requires an integer".to_string()),
+    };
+}
+
+"bitwise_shl" => {
+    if args.len() != 2 {
+        return Err("bitwise_shl() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let n = self.eval_expression(&args[1])?;
+    return match (a, n) {
+        (Value::Int(x), Value::Int(shift)) => {
+            if shift < 0 || shift >= 64 {
+                return Err("Shift amount out of range (0-63)".to_string());
+            }
+            Ok(Value::Int(x << shift))
+        }
+        _ => Err("bitwise_shl() requires two integers".to_string()),
+    };
+}
+
+"bitwise_shr" => {
+    if args.len() != 2 {
+        return Err("bitwise_shr() takes exactly 2 arguments".to_string());
+    }
+    let a = self.eval_expression(&args[0])?;
+    let n = self.eval_expression(&args[1])?;
+    return match (a, n) {
+        (Value::Int(x), Value::Int(shift)) => {
+            if shift < 0 || shift >= 64 {
+                return Err("Shift amount out of range (0-63)".to_string());
+            }
+            Ok(Value::Int(x >> shift))
+        }
+        _ => Err("bitwise_shr() requires two integers".to_string()),
+    };
+}
+
+"to_hex" => {
+    if args.len() != 1 {
+        return Err("to_hex() takes exactly 1 argument".to_string());
+    }
+    let n = self.eval_expression(&args[0])?;
+    return match n {
+        Value::Int(x) => Ok(Value::Str(format!("{:x}", x))),
+        _ => Err("to_hex() requires an integer".to_string()),
+    };
+}
+
+"from_hex" => {
+    if args.len() != 1 {
+        return Err("from_hex() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(hex_str) => {
+            match i64::from_str_radix(&hex_str, 16) {
+                Ok(n) => Ok(Value::Int(n)),
+                Err(_) => Err(format!("from_hex() invalid hex string: {}", hex_str)),
             }
         }
-        cols.push(Value::Str(current));
-        rows.push(Value::Array(cols));
+        _ => Err("from_hex() requires a string".to_string()),
+    };
+}
+
+"to_binary" => {
+    if args.len() != 1 {
+        return Err("to_binary() takes exactly 1 argument".to_string());
     }
-    return Ok(Value::Array(rows));
+    let n = self.eval_expression(&args[0])?;
+    return match n {
+        Value::Int(x) => Ok(Value::Str(format!("{:b}", x))),
+        _ => Err("to_binary() requires an integer".to_string()),
+    };
+}
+
+"from_binary" => {
+    if args.len() != 1 {
+        return Err("from_binary() takes exactly 1 argument".to_string());
+    }
+    let s = self.eval_expression(&args[0])?;
+    return match s {
+        Value::Str(bin_str) => {
+            match i64::from_str_radix(&bin_str, 2) {
+                Ok(n) => Ok(Value::Int(n)),
+                Err(_) => Err(format!("from_binary() invalid binary string: {}", bin_str)),
+            }
+        }
+        _ => Err("from_binary() requires a string".to_string()),
+    };
+}
+
+"to_octal" => {
+    if args.len() != 1 {
+        return Err("to_octal() takes exactly 1 argument".to_string());
+    }
+    let n = self.eval_expression(&args[0])?;
+    return match n {
+        Value::Int(x) => Ok(Value::Str(format!("{:o}", x))),
+        _ => Err("to_octal() requires an integer".to_string()),
+    };
+}
+
+"byte_array" => {
+    if args.len() != 1 {
+        return Err("byte_array() takes exactly 1 argument".to_string());
+    }
+    let size = self.eval_expression(&args[0])?;
+    return match size {
+        Value::Int(s) => {
+            if s < 0 {
+                return Err("byte_array() size must be non-negative".to_string());
+            }
+            let arr = vec![Value::Int(0); s as usize];
+            Ok(Value::Array(arr))
+        }
+        _ => Err("byte_array() requires an integer size".to_string()),
+    };
+}
+
+"bytes_to_str" => {
+    if args.len() != 1 {
+        return Err("bytes_to_str() takes exactly 1 argument".to_string());
+    }
+    let arr = self.eval_expression(&args[0])?;
+    return match arr {
+        Value::Array(bytes) => {
+            let mut result = String::new();
+            for val in bytes {
+                match val {
+                    Value::Int(b) => {
+                        if b < 0 || b > 255 {
+                            return Err(format!("bytes_to_str() byte out of range: {}", b));
+                        }
+                        result.push(b as u8 as char);
+                    }
+                    _ => return Err("bytes_to_str() array must contain integers".to_string()),
+                }
+            }
+            Ok(Value::Str(result))
+        }
+        _ => Err("bytes_to_str() requires an array".to_string()),
+    };
+}
+}
+// ============ PHASE 31: Database & Data Functions ============
+
+"csv_parse" => {
+    if args.len() != 1 {
+        return Err("csv_parse() takes exactly 1 argument".to_string());
+    }
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Str(s) => {
+            let mut result = Vec::new();
+            let lines = s.split('\n');
+            for line in lines {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let mut row = Vec::new();
+                let mut current = String::new();
+                let mut in_quotes = false;
+                for ch in line.chars() {
+                    match ch {
+                        '"' => in_quotes = !in_quotes,
+                        ',' if !in_quotes => {
+                            row.push(Value::Str(current.trim().to_string()));
+                            current.clear();
+                        }
+                        _ => current.push(ch),
+                    }
+                }
+                row.push(Value::Str(current.trim().to_string()));
+                result.push(Value::Array(row));
+            }
+            Ok(Value::Array(result))
+        }
+        _ => Err("csv_parse() requires a string".to_string()),
+    };
 }
 
 "csv_stringify" => {
-    if args.len() != 1 { return Err("csv_stringify() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("csv_stringify() expects an array".to_string()),
-    };
-    let mut lines = Vec::new();
-    for row in &arr {
-        if let Value::Array(cols) = row {
-            let fields: Vec<String> = cols.iter().map(|v| match v {
-                Value::Str(s) => {
-                    if s.contains(',') || s.contains('"') || s.contains('\n') {
-                        format!("\"{}\"", s.replace('"', "\"\""))
-                    } else { s.clone() }
-                }
-                other => format!("{}", other),
-            }).collect();
-            lines.push(fields.join(","));
-        }
+    if args.len() != 1 {
+        return Err("csv_stringify() takes exactly 1 argument".to_string());
     }
-    return Ok(Value::Str(lines.join("\n")));
+    let val = self.eval_expression(&args[0])?;
+    return match val {
+        Value::Array(rows) => {
+            let mut result = String::new();
+            for (i, row) in rows.iter().enumerate() {
+                if i > 0 {
+                    result.push('\n');
+                }
+                match row {
+                    Value::Array(cells) => {
+                        for (j, cell) in cells.iter().enumerate() {
+                            if j > 0 {
+                                result.push(',');
+                            }
+                            let cell_str = match cell {
+                                Value::Str(s) => s.clone(),
+                                _ => format!("{}", cell),
+                            };
+                            if cell_str.contains(',') || cell_str.contains('"') {
+                                result.push('"');
+                                result.push_str(&cell_str.replace('"', "\"\""));
+                                result.push('"');
+                            } else {
+                                result.push_str(&cell_str);
+                            }
+                        }
+                    }
+                    _ => {
+                        let val_str = format!("{}", row);
+                        result.push_str(&val_str);
+                    }
+                }
+            }
+            Ok(Value::Str(result))
+        }
+        _ => Err("csv_stringify() requires an array of arrays".to_string()),
+    };
 }
 
 "kv_new" => {
-    return Ok(Value::Struct {
+    if !args.is_empty() {
+        return Err("kv_new() takes no arguments".to_string());
+    }
+    let fields = HashMap::new();
+    Ok(Value::Struct {
         name: "_KVStore".to_string(),
-        fields: std::collections::HashMap::new(),
-    });
+        fields,
+    })
 }
 
 "kv_set" => {
-    if args.len() != 3 { return Err("kv_set() takes 3 arguments".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    let key = match self.eval_expression(&args[1])? {
-        Value::Str(s) => s,
-        _ => return Err("kv_set() key must be a string".to_string()),
-    };
-    let val = self.eval_expression(&args[2])?;
-    if let Value::Struct { name, mut fields } = store {
-        fields.insert(key, val);
-        return Ok(Value::Struct { name, fields });
+    if args.len() != 3 {
+        return Err("kv_set() takes exactly 3 arguments (store, key, value)".to_string());
     }
-    return Err("kv_set() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    let key_val = self.eval_expression(&args[1])?;
+    let value = self.eval_expression(&args[2])?;
+    
+    let key = match key_val {
+        Value::Str(k) => k,
+        _ => format!("{}", key_val),
+    };
+    
+    return match store {
+        Value::Struct { mut fields, .. } => {
+            fields.insert(key, value.clone());
+            Ok(Value::Struct {
+                name: "_KVStore".to_string(),
+                fields,
+            })
+        }
+        _ => Err("kv_set() requires a key-value store as first argument".to_string()),
+    };
 }
 
 "kv_get" => {
-    if args.len() != 2 { return Err("kv_get() takes 2 arguments".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    let key = match self.eval_expression(&args[1])? {
-        Value::Str(s) => s,
-        _ => return Err("kv_get() key must be a string".to_string()),
-    };
-    if let Value::Struct { fields, .. } = store {
-        return Ok(fields.get(&key).cloned().unwrap_or(Value::None));
+    if args.len() != 2 {
+        return Err("kv_get() takes exactly 2 arguments (store, key)".to_string());
     }
-    return Err("kv_get() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    let key_val = self.eval_expression(&args[1])?;
+    
+    let key = match key_val {
+        Value::Str(k) => k,
+        _ => format!("{}", key_val),
+    };
+    
+    return match store {
+        Value::Struct { fields, .. } => {
+            match fields.get(&key) {
+                Some(v) => Ok(v.clone()),
+                None => Ok(Value::None),
+            }
+        }
+        _ => Err("kv_get() requires a key-value store as first argument".to_string()),
+    };
 }
 
 "kv_del" => {
-    if args.len() != 2 { return Err("kv_del() takes 2 arguments".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    let key = match self.eval_expression(&args[1])? {
-        Value::Str(s) => s,
-        _ => return Err("kv_del() key must be a string".to_string()),
-    };
-    if let Value::Struct { name, mut fields } = store {
-        fields.remove(&key);
-        return Ok(Value::Struct { name, fields });
+    if args.len() != 2 {
+        return Err("kv_del() takes exactly 2 arguments (store, key)".to_string());
     }
-    return Err("kv_del() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    let key_val = self.eval_expression(&args[1])?;
+    
+    let key = match key_val {
+        Value::Str(k) => k,
+        _ => format!("{}", key_val),
+    };
+    
+    return match store {
+        Value::Struct { mut fields, .. } => {
+            fields.remove(&key);
+            Ok(Value::Struct {
+                name: "_KVStore".to_string(),
+                fields,
+            })
+        }
+        _ => Err("kv_del() requires a key-value store as first argument".to_string()),
+    };
 }
 
 "kv_keys" => {
-    if args.len() != 1 { return Err("kv_keys() takes 1 argument".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    if let Value::Struct { fields, .. } = store {
-        let mut keys: Vec<String> = fields.keys().cloned().collect();
-        keys.sort();
-        return Ok(Value::Array(keys.into_iter().map(Value::Str).collect()));
+    if args.len() != 1 {
+        return Err("kv_keys() takes exactly 1 argument".to_string());
     }
-    return Err("kv_keys() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    
+    return match store {
+        Value::Struct { fields, .. } => {
+            let keys: Vec<Value> = fields.keys()
+                .map(|k| Value::Str(k.clone()))
+                .collect();
+            Ok(Value::Array(keys))
+        }
+        _ => Err("kv_keys() requires a key-value store".to_string()),
+    };
 }
 
 "kv_values" => {
-    if args.len() != 1 { return Err("kv_values() takes 1 argument".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    if let Value::Struct { fields, .. } = store {
-        let mut pairs: Vec<(String, Value)> = fields.into_iter().collect();
-        pairs.sort_by(|a, b| a.0.cmp(&b.0));
-        return Ok(Value::Array(pairs.into_iter().map(|(_, v)| v).collect()));
+    if args.len() != 1 {
+        return Err("kv_values() takes exactly 1 argument".to_string());
     }
-    return Err("kv_values() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    
+    return match store {
+        Value::Struct { fields, .. } => {
+            let values: Vec<Value> = fields.values().cloned().collect();
+            Ok(Value::Array(values))
+        }
+        _ => Err("kv_values() requires a key-value store".to_string()),
+    };
 }
 
 "kv_len" => {
-    if args.len() != 1 { return Err("kv_len() takes 1 argument".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    if let Value::Struct { fields, .. } = store {
-        return Ok(Value::Int(fields.len() as i64));
+    if args.len() != 1 {
+        return Err("kv_len() takes exactly 1 argument".to_string());
     }
-    return Err("kv_len() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    
+    return match store {
+        Value::Struct { fields, .. } => {
+            Ok(Value::Int(fields.len() as i64))
+        }
+        _ => Err("kv_len() requires a key-value store".to_string()),
+    };
 }
 
 "kv_has" => {
-    if args.len() != 2 { return Err("kv_has() takes 2 arguments".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    let key = match self.eval_expression(&args[1])? {
-        Value::Str(s) => s,
-        _ => return Err("kv_has() key must be a string".to_string()),
-    };
-    if let Value::Struct { fields, .. } = store {
-        return Ok(Value::Bool(fields.contains_key(&key)));
+    if args.len() != 2 {
+        return Err("kv_has() takes exactly 2 arguments (store, key)".to_string());
     }
-    return Err("kv_has() expects a kv store".to_string());
+    let store = self.eval_expression(&args[0])?;
+    let key_val = self.eval_expression(&args[1])?;
+    
+    let key = match key_val {
+        Value::Str(k) => k,
+        _ => format!("{}", key_val),
+    };
+    
+    return match store {
+        Value::Struct { fields, .. } => {
+            Ok(Value::Bool(fields.contains_key(&key)))
+        }
+        _ => Err("kv_has() requires a key-value store as first argument".to_string()),
+    };
 }
 
 "kv_clear" => {
-    if args.len() != 1 { return Err("kv_clear() takes 1 argument".to_string()); }
-    let store = self.eval_expression(&args[0])?;
-    if let Value::Struct { name, .. } = store {
-        return Ok(Value::Struct { name, fields: std::collections::HashMap::new() });
+    if args.len() != 1 {
+        return Err("kv_clear() takes exactly 1 argument".to_string());
     }
-    return Err("kv_clear() expects a kv store".to_string());
+    let _store = self.eval_expression(&args[0])?;
+    
+    return Ok(Value::Struct {
+        name: "_KVStore".to_string(),
+        fields: HashMap::new(),
+    });
 }
 
 "serialize" => {
-    if args.len() != 1 { return Err("serialize() takes 1 argument".to_string()); }
+    if args.len() != 1 {
+        return Err("serialize() takes exactly 1 argument".to_string());
+    }
     let val = self.eval_expression(&args[0])?;
-    let s = match &val {
-        Value::Int(n) => format!("i:{}", n),
+    let serialized = match val {
+        Value::Int(i) => format!("i:{}", i),
         Value::Float(f) => format!("f:{}", f),
         Value::Str(s) => format!("s:{}", s),
         Value::Bool(b) => format!("b:{}", b),
         Value::None => "n:".to_string(),
         Value::Array(arr) => {
-            let parts: Vec<String> = arr.iter().map(|v| match v {
-                Value::Int(n) => format!("i:{}", n),
-                Value::Float(f) => format!("f:{}", f),
-                Value::Str(s) => format!("s:{}", s),
-                Value::Bool(b) => format!("b:{}", b),
-                _ => "n:".to_string(),
-            }).collect();
-            format!("a:{}", parts.join("|"))
+            let mut result = String::from("a:");
+            for (i, v) in arr.iter().enumerate() {
+                if i > 0 {
+                    result.push('|');
+                }
+                match v {
+                    Value::Int(n) => result.push_str(&format!("i:{}", n)),
+                    Value::Float(f) => result.push_str(&format!("f:{}", f)),
+                    Value::Str(s) => result.push_str(&format!("s:{}", s)),
+                    Value::Bool(b) => result.push_str(&format!("b:{}", b)),
+                    Value::None => result.push_str("n:"),
+                    _ => result.push_str(&format!("s:{}", v)),
+                }
+            }
+            result
         }
         _ => format!("s:{}", val),
     };
-    return Ok(Value::Str(s));
+    Ok(Value::Str(serialized))
 }
 
 "deserialize" => {
-    if args.len() != 1 { return Err("deserialize() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("deserialize() expects a string".to_string()),
-    };
-    if let Some(rest) = s.strip_prefix("i:") {
-        return Ok(Value::Int(rest.parse::<i64>().map_err(|e| e.to_string())?));
-    } else if let Some(rest) = s.strip_prefix("f:") {
-        return Ok(Value::Float(rest.parse::<f64>().map_err(|e| e.to_string())?));
-    } else if let Some(rest) = s.strip_prefix("s:") {
-        return Ok(Value::Str(rest.to_string()));
-    } else if let Some(rest) = s.strip_prefix("b:") {
-        return Ok(Value::Bool(rest == "true"));
-    } else if s == "n:" {
-        return Ok(Value::None);
-    } else if let Some(rest) = s.strip_prefix("a:") {
-        let items: Vec<Value> = rest.split('|').map(|item| {
-            if let Some(r) = item.strip_prefix("i:") {
-                Value::Int(r.parse::<i64>().unwrap_or(0))
-            } else if let Some(r) = item.strip_prefix("f:") {
-                Value::Float(r.parse::<f64>().unwrap_or(0.0))
-            } else if let Some(r) = item.strip_prefix("s:") {
-                Value::Str(r.to_string())
-            } else if let Some(r) = item.strip_prefix("b:") {
-                Value::Bool(r == "true")
-            } else {
-                Value::None
-            }
-        }).collect();
-        return Ok(Value::Array(items));
+    if args.len() != 1 {
+        return Err("deserialize() takes exactly 1 argument".to_string());
     }
-    return Err(format!("Cannot deserialize: {}", s));
-}
-
-// ===== Phase 33: Cross-Compilation & Platform =====
-
-"platform_os" => {
-    let os = if cfg!(target_os = "linux") { "linux" }
-        else if cfg!(target_os = "macos") { "macos" }
-        else if cfg!(target_os = "windows") { "windows" }
-        else { "unknown" };
-    return Ok(Value::Str(os.to_string()));
-}
-
-"platform_arch" => {
-    let arch = if cfg!(target_arch = "x86_64") { "x86_64" }
-        else if cfg!(target_arch = "aarch64") { "aarch64" }
-        else if cfg!(target_arch = "x86") { "x86" }
-        else if cfg!(target_arch = "arm") { "arm" }
-        else { "unknown" };
-    return Ok(Value::Str(arch.to_string()));
-}
-
-"platform_family" => {
-    let family = if cfg!(target_family = "unix") { "unix" }
-        else if cfg!(target_family = "windows") { "windows" }
-        else if cfg!(target_family = "wasm") { "wasm" }
-        else { "unknown" };
-    return Ok(Value::Str(family.to_string()));
-}
-
-"platform_endian" => {
-    let endian = if cfg!(target_endian = "little") { "little" } else { "big" };
-    return Ok(Value::Str(endian.to_string()));
-}
-
-"platform_pointer_size" => {
-    return Ok(Value::Int(std::mem::size_of::<usize>() as i64));
-}
-
-"platform_cores" => {
-    return Ok(Value::Int(1));
-}
-
-"sizeof" => {
-    if args.len() != 1 { return Err("sizeof() takes 1 argument".to_string()); }
-    let type_name = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("sizeof() expects a type name string".to_string()),
-    };
-    let size = match type_name.as_str() {
-        "int" => 8,
-        "float" => 8,
-        "bool" => 1,
-        "char" => 1,
-        "str" => std::mem::size_of::<usize>() as i64,
-        _ => return Err(format!("Unknown type for sizeof: {}", type_name)),
-    };
-    return Ok(Value::Int(size));
-}
-
-"bitwise_and" => {
-    if args.len() != 2 { return Err("bitwise_and() takes 2 arguments".to_string()); }
-    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_and() expects integers".to_string()) };
-    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_and() expects integers".to_string()) };
-    return Ok(Value::Int(a & b));
-}
-
-"bitwise_or" => {
-    if args.len() != 2 { return Err("bitwise_or() takes 2 arguments".to_string()); }
-    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_or() expects integers".to_string()) };
-    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_or() expects integers".to_string()) };
-    return Ok(Value::Int(a | b));
-}
-
-"bitwise_xor" => {
-    if args.len() != 2 { return Err("bitwise_xor() takes 2 arguments".to_string()); }
-    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_xor() expects integers".to_string()) };
-    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_xor() expects integers".to_string()) };
-    return Ok(Value::Int(a ^ b));
-}
-
-"bitwise_not" => {
-    if args.len() != 1 { return Err("bitwise_not() takes 1 argument".to_string()); }
-    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_not() expects an integer".to_string()) };
-    return Ok(Value::Int(!a));
-}
-
-"bitwise_shl" => {
-    if args.len() != 2 { return Err("bitwise_shl() takes 2 arguments".to_string()); }
-    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_shl() expects integers".to_string()) };
-    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_shl() expects integers".to_string()) };
-    return Ok(Value::Int(a << b));
-}
-
-"bitwise_shr" => {
-    if args.len() != 2 { return Err("bitwise_shr() takes 2 arguments".to_string()); }
-    let a = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("bitwise_shr() expects integers".to_string()) };
-    let b = match self.eval_expression(&args[1])? { Value::Int(n) => n, _ => return Err("bitwise_shr() expects integers".to_string()) };
-    return Ok(Value::Int(a >> b));
-}
-
-"to_hex" => {
-    if args.len() != 1 { return Err("to_hex() takes 1 argument".to_string()); }
-    let n = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("to_hex() expects an integer".to_string()) };
-    return Ok(Value::Str(format!("{:x}", n)));
-}
-
-"from_hex" => {
-    if args.len() != 1 { return Err("from_hex() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("from_hex() expects a string".to_string()) };
-    let clean = s.strip_prefix("0x").unwrap_or(&s);
-    let val = i64::from_str_radix(clean, 16).map_err(|e| e.to_string())?;
-    return Ok(Value::Int(val));
-}
-
-"to_binary" => {
-    if args.len() != 1 { return Err("to_binary() takes 1 argument".to_string()); }
-    let n = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("to_binary() expects an integer".to_string()) };
-    return Ok(Value::Str(format!("{:b}", n)));
-}
-
-"from_binary" => {
-    if args.len() != 1 { return Err("from_binary() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? { Value::Str(s) => s, _ => return Err("from_binary() expects a string".to_string()) };
-    let clean = s.strip_prefix("0b").unwrap_or(&s);
-    let val = i64::from_str_radix(clean, 2).map_err(|e| e.to_string())?;
-    return Ok(Value::Int(val));
-}
-
-"to_octal" => {
-    if args.len() != 1 { return Err("to_octal() takes 1 argument".to_string()); }
-    let n = match self.eval_expression(&args[0])? { Value::Int(n) => n, _ => return Err("to_octal() expects an integer".to_string()) };
-    return Ok(Value::Str(format!("{:o}", n)));
-}
-
-"byte_array" => {
-    if args.len() != 1 { return Err("byte_array() takes 1 argument".to_string()); }
-    let size = match self.eval_expression(&args[0])? { Value::Int(n) => n as usize, _ => return Err("byte_array() expects an integer".to_string()) };
-    return Ok(Value::Array(vec![Value::Int(0); size]));
-}
-
-"bytes_to_str" => {
-    if args.len() != 1 { return Err("bytes_to_str() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? { Value::Array(a) => a, _ => return Err("bytes_to_str() expects an array".to_string()) };
-    let bytes: Vec<u8> = arr.iter().map(|v| match v {
-        Value::Int(n) => *n as u8,
-        _ => 0,
-    }).collect();
-    let s = String::from_utf8_lossy(&bytes).to_string();
-    return Ok(Value::Str(s));
-}
-
-
-"fmt" => {
-    if args.is_empty() { return Err("fmt() takes at least 1 argument".to_string()); }
-    let template = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("fmt() first argument must be a string".to_string()),
-    };
+    let val = self.eval_expression(&args[0])?;
     
-    let mut result = template.clone();
-    let mut placeholder_count = 0;
-    while let Some(pos) = result.find("{}") {
-        placeholder_count += 1;
-        if placeholder_count >= args.len() {
-            return Err("fmt() not enough arguments for placeholders".to_string());
-        }
-        let arg_val = self.eval_expression(&args[placeholder_count])?;
-        let arg_str = format!("{}", arg_val);
-        result.replace_range(pos..pos+2, &arg_str);
-    }
-    return Ok(Value::Str(result));
-}
-
-"str_format" => {
-    if args.is_empty() { return Err("str_format() takes at least 1 argument".to_string()); }
-    let template = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_format() first argument must be a string".to_string()),
-    };
-    
-    let mut result = template.clone();
-    let mut placeholder_count = 0;
-    while let Some(pos) = result.find("{}") {
-        placeholder_count += 1;
-        if placeholder_count >= args.len() {
-            return Err("str_format() not enough arguments for placeholders".to_string());
-        }
-        let arg_val = self.eval_expression(&args[placeholder_count])?;
-        let arg_str = format!("{}", arg_val);
-        result.replace_range(pos..pos+2, &arg_str);
-    }
-    return Ok(Value::Str(result));
-}
-
-"str_count" => {
-    if args.len() != 2 { return Err("str_count() takes 2 arguments".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_count() expects (string, substring)".to_string()),
-    };
-    let sub = match self.eval_expression(&args[1])? {
-        Value::Str(s) => s,
-        _ => return Err("str_count() expects (string, substring)".to_string()),
-    };
-    let count = s.matches(&sub).count() as i64;
-    return Ok(Value::Int(count));
-}
-
-"str_is_empty" => {
-    if args.len() != 1 { return Err("str_is_empty() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_is_empty() expects a string".to_string()),
-    };
-    return Ok(Value::Bool(s.is_empty()));
-}
-
-"str_is_numeric" => {
-    if args.len() != 1 { return Err("str_is_numeric() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_is_numeric() expects a string".to_string()),
-    };
-    let is_numeric = !s.is_empty() && s.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '.');
-    return Ok(Value::Bool(is_numeric));
-}
-
-"str_lines" => {
-    if args.len() != 1 { return Err("str_lines() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_lines() expects a string".to_string()),
-    };
-    let lines: Vec<Value> = s.lines().map(|line| Value::Str(line.to_string())).collect();
-    return Ok(Value::Array(lines));
-}
-
-"arr_enumerate" => {
-    if args.len() != 1 { return Err("arr_enumerate() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_enumerate() expects an array".to_string()),
-    };
-    let enumerated: Vec<Value> = arr.iter().enumerate()
-        .map(|(i, v)| Value::Array(vec![Value::Int(i as i64), v.clone()]))
-        .collect();
-    return Ok(Value::Array(enumerated));
-}
-
-"arr_unique" => {
-    if args.len() != 1 { return Err("arr_unique() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_unique() expects an array".to_string()),
-    };
-    let mut unique = Vec::new();
-    for item in arr {
-        let found = unique.iter().any(|u| format!("{}", u) == format!("{}", item));
-        if !found {
-            unique.push(item);
-        }
-    }
-    return Ok(Value::Array(unique));
-}
-
-"arr_flatten" => {
-    if args.len() != 1 { return Err("arr_flatten() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_flatten() expects an array".to_string()),
-    };
-    let mut flattened = Vec::new();
-    for item in arr {
-        match item {
-            Value::Array(inner) => flattened.extend(inner),
-            _ => flattened.push(item),
-        }
-    }
-    return Ok(Value::Array(flattened));
-}
-
-"arr_sum" => {
-    if args.len() != 1 { return Err("arr_sum() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_sum() expects an array".to_string()),
-    };
-    let mut sum: i64 = 0;
-    for item in arr {
-        match item {
-            Value::Int(n) => sum += n,
-            Value::Float(f) => sum += f as i64,
-            _ => return Err("arr_sum() elements must be numeric".to_string()),
-        }
-    }
-    return Ok(Value::Int(sum));
-}
-
-"arr_min" => {
-    if args.len() != 1 { return Err("arr_min() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_min() expects an array".to_string()),
-    };
-    if arr.is_empty() { return Err("arr_min() cannot find min of empty array".to_string()); }
-    let mut min_val = match arr[0] {
-        Value::Int(n) => n,
-        Value::Float(f) => f as i64,
-        _ => return Err("arr_min() elements must be numeric".to_string()),
-    };
-    for item in &arr[1..] {
-        let val = match item {
-            Value::Int(n) => *n,
-            Value::Float(f) => *f as i64,
-            _ => return Err("arr_min() elements must be numeric".to_string()),
-        };
-        if val < min_val { min_val = val; }
-    }
-    return Ok(Value::Int(min_val));
-}
-
-"arr_max" => {
-    if args.len() != 1 { return Err("arr_max() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_max() expects an array".to_string()),
-    };
-    if arr.is_empty() { return Err("arr_max() cannot find max of empty array".to_string()); }
-    let mut max_val = match arr[0] {
-        Value::Int(n) => n,
-        Value::Float(f) => f as i64,
-        _ => return Err("arr_max() elements must be numeric".to_string()),
-    };
-    for item in &arr[1..] {
-        let val = match item {
-            Value::Int(n) => *n,
-            Value::Float(f) => *f as i64,
-            _ => return Err("arr_max() elements must be numeric".to_string()),
-        };
-        if val > max_val { max_val = val; }
-    }
-    return Ok(Value::Int(max_val));
-}
-
-"arr_join" => {
-    if args.len() != 2 { return Err("arr_join() takes 2 arguments".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_join() expects (array, separator)".to_string()),
-    };
-    let sep = match self.eval_expression(&args[1])? {
-        Value::Str(s) => s,
-        _ => return Err("arr_join() separator must be a string".to_string()),
-    };
-    let strings: Vec<String> = arr.iter().map(|v| format!("{}", v)).collect();
-    return Ok(Value::Str(strings.join(&sep)));
-}
-
-"arr_chunk" => {
-    if args.len() != 2 { return Err("arr_chunk() takes 2 arguments".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_chunk() expects (array, chunk_size)".to_string()),
-    };
-    let chunk_size = match self.eval_expression(&args[1])? {
-        Value::Int(n) => n as usize,
-        _ => return Err("arr_chunk() chunk_size must be an integer".to_string()),
-    };
-    if chunk_size == 0 { return Err("arr_chunk() chunk_size must be > 0".to_string()); }
-    
-    let mut chunks = Vec::new();
-    for chunk in arr.chunks(chunk_size) {
-        chunks.push(Value::Array(chunk.to_vec()));
-    }
-    return Ok(Value::Array(chunks));
-}
-
-"arr_take" => {
-    if args.len() != 2 { return Err("arr_take() takes 2 arguments".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_take() expects (array, count)".to_string()),
-    };
-    let n = match self.eval_expression(&args[1])? {
-        Value::Int(n) => n as usize,
-        _ => return Err("arr_take() count must be an integer".to_string()),
-    };
-    let taken: Vec<Value> = arr.into_iter().take(n).collect();
-    return Ok(Value::Array(taken));
-}
-
-"arr_skip" => {
-    if args.len() != 2 { return Err("arr_skip() takes 2 arguments".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_skip() expects (array, count)".to_string()),
-    };
-    let n = match self.eval_expression(&args[1])? {
-        Value::Int(n) => n as usize,
-        _ => return Err("arr_skip() count must be an integer".to_string()),
-    };
-    let skipped: Vec<Value> = arr.into_iter().skip(n).collect();
-    return Ok(Value::Array(skipped));
-}
-
-"to_int" => {
-    if args.len() != 1 { return Err("to_int() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    match val {
-        Value::Int(n) => return Ok(Value::Int(n)),
-        Value::Float(f) => return Ok(Value::Int(f as i64)),
+    return match val {
         Value::Str(s) => {
-            match s.parse::<i64>() {
-                Ok(n) => return Ok(Value::Int(n)),
-                Err(_) => return Err("to_int() cannot parse string as integer".to_string()),
+            if s.len() < 2 {
+                return Ok(Value::None);
             }
-        },
-        Value::Bool(b) => return Ok(Value::Int(if b { 1 } else { 0 })),
-        Value::None => return Ok(Value::Int(0)),
-        _ => return Err("to_int() cannot convert this type".to_string()),
-    }
-}
-
-"to_float" => {
-    if args.len() != 1 { return Err("to_float() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    match val {
-        Value::Int(n) => return Ok(Value::Float(n as f64)),
-        Value::Float(f) => return Ok(Value::Float(f)),
-        Value::Str(s) => {
-            match s.parse::<f64>() {
-                Ok(f) => return Ok(Value::Float(f)),
-                Err(_) => return Err("to_float() cannot parse string as float".to_string()),
-            }
-        },
-        Value::Bool(b) => return Ok(Value::Float(if b { 1.0 } else { 0.0 })),
-        Value::None => return Ok(Value::Float(0.0)),
-        _ => return Err("to_float() cannot convert this type".to_string()),
-    }
-}
-
-"to_bool" => {
-    if args.len() != 1 { return Err("to_bool() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    let b = match val {
-        Value::Bool(b) => b,
-        Value::Int(n) => n != 0,
-        Value::Float(f) => f != 0.0,
-        Value::Str(s) => {
-            let lower = s.to_lowercase();
-            lower != "false" && lower != "0" && lower != "" && lower != "none"
-        },
-        Value::None => false,
-        Value::Array(a) => !a.is_empty(),
-        _ => true,
-    };
-    return Ok(Value::Bool(b));
-}
-
-"chr" => {
-    if args.len() != 1 { return Err("chr() takes 1 argument".to_string()); }
-    let n = match self.eval_expression(&args[0])? {
-        Value::Int(n) => n as u32,
-        _ => return Err("chr() expects an integer".to_string()),
-    };
-    match char::from_u32(n) {
-        Some(c) => return Ok(Value::Str(c.to_string())),
-        None => return Err("chr() invalid unicode code point".to_string()),
-    }
-}
-
-"ord" => {
-    if args.len() != 1 { return Err("ord() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("ord() expects a string".to_string()),
-    };
-    match s.chars().next() {
-        Some(c) => return Ok(Value::Int(c as i64)),
-        None => return Err("ord() string is empty".to_string()),
-    }
-}
-
-"range_arr" => {
-    if args.len() != 2 { return Err("range_arr() takes 2 arguments".to_string()); }
-    let start = match self.eval_expression(&args[0])? {
-        Value::Int(n) => n,
-        _ => return Err("range_arr() expects integers".to_string()),
-    };
-    let end = match self.eval_expression(&args[1])? {
-        Value::Int(n) => n,
-        _ => return Err("range_arr() expects integers".to_string()),
-    };
-    let arr: Vec<Value> = if start <= end {
-        (start..end).map(Value::Int).collect()
-    } else {
-        ((end+1)..=start).rev().map(Value::Int).collect()
-    };
-    return Ok(Value::Array(arr));
-}
-
-"repeat" => {
-    if args.len() != 2 { return Err("repeat() takes 2 arguments".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    let n = match self.eval_expression(&args[1])? {
-        Value::Int(n) => n as usize,
-        _ => return Err("repeat() count must be an integer".to_string()),
-    };
-    let repeated: Vec<Value> = (0..n).map(|_| val.clone()).collect();
-    return Ok(Value::Array(repeated));
-}
-
-"zip" => {
-    if args.len() != 2 { return Err("zip() takes 2 arguments".to_string()); }
-    let a = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("zip() expects two arrays".to_string()),
-    };
-    let b = match self.eval_expression(&args[1])? {
-        Value::Array(b) => b,
-        _ => return Err("zip() expects two arrays".to_string()),
-    };
-    let len = std::cmp::min(a.len(), b.len());
-    let zipped: Vec<Value> = (0..len)
-        .map(|i| Value::Array(vec![a[i].clone(), b[i].clone()]))
-        .collect();
-    return Ok(Value::Array(zipped));
-}
-"typeof_detailed" => {
-    if args.len() != 1 { return Err("typeof_detailed() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    let detailed_type = match &val {
-        Value::None => "none".to_string(),
-        Value::Bool(_) => "bool".to_string(),
-        Value::Int(_) => "int".to_string(),
-        Value::Float(_) => "float".to_string(),
-        Value::Str(_) => "string".to_string(),
-        Value::Array(arr) => {
-            if arr.is_empty() {
-                "array<unknown>".to_string()
-            } else {
-                let first_type = match &arr[0] {
-                    Value::Int(_) => "int",
-                    Value::Float(_) => "float",
-                    Value::Str(_) => "string",
-                    Value::Bool(_) => "bool",
-                    Value::Array(_) => "array",
-                    Value::Struct { .. } => "struct",
-                    Value::None => "none",
-                    _ => "unknown",
-                };
-                format!("array<{}>", first_type)
-            }
-        }
-        Value::Struct { .. } => "struct".to_string(),
-        _ => "unknown".to_string(),
-    };
-    return Ok(Value::Str(detailed_type));
-}
-
-"is_int" => {
-    if args.len() != 1 { return Err("is_int() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    return Ok(Value::Bool(matches!(val, Value::Int(_))));
-}
-
-"is_float" => {
-    if args.len() != 1 { return Err("is_float() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    return Ok(Value::Bool(matches!(val, Value::Float(_))));
-}
-
-"is_str" => {
-    if args.len() != 1 { return Err("is_str() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    return Ok(Value::Bool(matches!(val, Value::Str(_))));
-}
-
-"is_bool" => {
-    if args.len() != 1 { return Err("is_bool() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    return Ok(Value::Bool(matches!(val, Value::Bool(_))));
-}
-
-"is_array" => {
-    if args.len() != 1 { return Err("is_array() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    return Ok(Value::Bool(matches!(val, Value::Array(_))));
-}
-
-"is_none" => {
-    if args.len() != 1 { return Err("is_none() takes 1 argument".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    return Ok(Value::Bool(matches!(val, Value::None)));
-}
-
-"clamp" => {
-    if args.len() != 3 { return Err("clamp() takes 3 arguments".to_string()); }
-    let val = self.eval_expression(&args[0])?;
-    let min = self.eval_expression(&args[1])?;
-    let max = self.eval_expression(&args[2])?;
-    let val_num = match val {
-        Value::Int(n) => n as f64,
-        Value::Float(f) => f,
-        _ => return Err("clamp() expects numeric values".to_string()),
-    };
-    let min_num = match min {
-        Value::Int(n) => n as f64,
-        Value::Float(f) => f,
-        _ => return Err("clamp() expects numeric values".to_string()),
-    };
-    let max_num = match max {
-        Value::Int(n) => n as f64,
-        Value::Float(f) => f,
-        _ => return Err("clamp() expects numeric values".to_string()),
-    };
-    let clamped = if val_num < min_num {
-        min_num
-    } else if val_num > max_num {
-        max_num
-    } else {
-        val_num
-    };
-    if matches!(val, Value::Int(_)) {
-        return Ok(Value::Int(clamped as i64));
-    } else {
-        return Ok(Value::Float(clamped));
-    }
-}
-
-"lerp" => {
-    if args.len() != 3 { return Err("lerp() takes 3 arguments".to_string()); }
-    let a = self.eval_expression(&args[0])?;
-    let b = self.eval_expression(&args[1])?;
-    let t = self.eval_expression(&args[2])?;
-    let a_num = match a {
-        Value::Int(n) => n as f64,
-        Value::Float(f) => f,
-        _ => return Err("lerp() expects numeric values".to_string()),
-    };
-    let b_num = match b {
-        Value::Int(n) => n as f64,
-        Value::Float(f) => f,
-        _ => return Err("lerp() expects numeric values".to_string()),
-    };
-    let t_num = match t {
-        Value::Int(n) => n as f64,
-        Value::Float(f) => f,
-        _ => return Err("lerp() expects numeric values".to_string()),
-    };
-    let result = a_num + (b_num - a_num) * t_num;
-    return Ok(Value::Float(result));
-}
-
-"str_capitalize" => {
-    if args.len() != 1 { return Err("str_capitalize() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_capitalize() expects a string".to_string()),
-    };
-    if s.is_empty() {
-        return Ok(Value::Str(s));
-    }
-    let mut chars = s.chars();
-    let first = chars.next().unwrap().to_uppercase().to_string();
-    let rest: String = chars.collect();
-    return Ok(Value::Str(format!("{}{}", first, rest)));
-}
-
-"str_title" => {
-    if args.len() != 1 { return Err("str_title() takes 1 argument".to_string()); }
-    let s = match self.eval_expression(&args[0])? {
-        Value::Str(s) => s,
-        _ => return Err("str_title() expects a string".to_string()),
-    };
-    let words: Vec<String> = s
-        .split_whitespace()
-        .map(|word| {
-            let mut chars = word.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => {
-                    let capitalized = first.to_uppercase().to_string();
-                    let rest: String = chars.collect();
-                    format!("{}{}", capitalized, rest)
+            let type_char = s.chars().next().unwrap();
+            let content = &s[2..];
+            
+            match type_char {
+                'i' => {
+                    match content.parse::<i64>() {
+                        Ok(n) => Ok(Value::Int(n)),
+                        Err(_) => Ok(Value::None),
+                    }
                 }
+                'f' => {
+                    match content.parse::<f64>() {
+                        Ok(f) => Ok(Value::Float(f)),
+                        Err(_) => Ok(Value::None),
+                    }
+                }
+                's' => Ok(Value::Str(content.to_string())),
+                'b' => {
+                    match content {
+                        "true" => Ok(Value::Bool(true)),
+                        "false" => Ok(Value::Bool(false)),
+                        _ => Ok(Value::None),
+                    }
+                }
+                'n' => Ok(Value::None),
+                'a' => {
+                    let mut result = Vec::new();
+                    for part in content.split('|') {
+                        if part.len() < 2 {
+                            continue;
+                        }
+                        let part_type = part.chars().next().unwrap();
+                        let part_content = &part[2..];
+                        match part_type {
+                            'i' => {
+                                if let Ok(n) = part_content.parse::<i64>() {
+                                    result.push(Value::Int(n));
+                                }
+                            }
+                            'f' => {
+                                if let Ok(f) = part_content.parse::<f64>() {
+                                    result.push(Value::Float(f));
+                                }
+                            }
+                            's' => result.push(Value::Str(part_content.to_string())),
+                            'b' => {
+                                result.push(Value::Bool(part_content == "true"));
+                            }
+                            'n' => result.push(Value::None),
+                            _ => {}
+                        }
+                    }
+                    Ok(Value::Array(result))
+                }
+                _ => Ok(Value::None),
             }
-        })
-        .collect();
-    return Ok(Value::Str(words.join(" ")));
-}
-
-"arr_last" => {
-    if args.len() != 1 { return Err("arr_last() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_last() expects an array".to_string()),
-    };
-    if arr.is_empty() {
-        return Ok(Value::None);
-    }
-    return Ok(arr[arr.len() - 1].clone());
-}
-
-"arr_first" => {
-    if args.len() != 1 { return Err("arr_first() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_first() expects an array".to_string()),
-    };
-    if arr.is_empty() {
-        return Ok(Value::None);
-    }
-    return Ok(arr[0].clone());
-}
-
-"arr_compact" => {
-    if args.len() != 1 { return Err("arr_compact() takes 1 argument".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_compact() expects an array".to_string()),
-    };
-    let compacted: Vec<Value> = arr
-        .into_iter()
-        .filter(|v| !matches!(v, Value::None))
-        .collect();
-    return Ok(Value::Array(compacted));
-}
-
-"arr_count" => {
-    if args.len() != 2 { return Err("arr_count() takes 2 arguments".to_string()); }
-    let arr = match self.eval_expression(&args[0])? {
-        Value::Array(a) => a,
-        _ => return Err("arr_count() expects an array".to_string()),
-    };
-    let search_val = self.eval_expression(&args[1])?;
-    let count: i64 = arr
-        .iter()
-        .filter(|v| {
-            match (v, &search_val) {
-                (Value::Int(a), Value::Int(b)) => a == b,
-                (Value::Float(a), Value::Float(b)) => a == b,
-                (Value::Str(a), Value::Str(b)) => a == b,
-                (Value::Bool(a), Value::Bool(b)) => a == b,
-                (Value::None, Value::None) => true,
-                _ => false,
-            }
-        })
-        .count() as i64;
-    return Ok(Value::Int(count));
-}
-
-"time_ms" => {
-    if args.len() != 0 { return Err("time_ms() takes 0 arguments".to_string()); }
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let duration = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    return Ok(Value::Int(duration.as_millis() as i64));
-}
-
-"exit" => {
-    if args.len() > 1 { return Err("exit() takes 0 or 1 argument".to_string()); }
-    let code = if args.is_empty() {
-        0
-    } else {
-        match self.eval_expression(&args[0])? {
-            Value::Int(n) => n as i32,
-            _ => return Err("exit() expects an integer".to_string()),
         }
+        _ => Err("deserialize() requires a string".to_string()),
     };
-    std::process::exit(code);
 }
+
 
 
 
@@ -4138,7 +3793,7 @@ impl Interpreter {
                     format!("[{}]", items.join(","))
                 }
             }
-            Value::Struct { name: _, fields } => {
+            Value::Struct { name, fields } => {
                 if fields.is_empty() {
                     "{}".to_string()
                 } else if pretty {
@@ -6974,6 +6629,237 @@ mod tests {
 
 
 
+    // ============ PHASE 31: Database & Data Tests ============
+    #[test]
+    fn test_csv_parse_basic() {
+        let (result, output) = run_vryn(r#"
+            let data = csv_parse("a,b,c\n1,2,3")
+            println(len(data))
+            println(len(data[0]))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+        assert_eq!(output[1], "3");
+    }
+
+    #[test]
+    fn test_csv_parse_quoted() {
+        let (result, output) = run_vryn(r#"
+            let data = csv_parse("name,value\n\"John Doe\",\"100,000\"")
+            println(len(data))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+    }
+
+    #[test]
+    fn test_csv_stringify_basic() {
+        let (result, output) = run_vryn(r#"
+            let data = [["a", "b"], ["1", "2"]]
+            let csv = csv_stringify(data)
+            println(csv)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("a,b"));
+    }
+
+    #[test]
+    fn test_kv_new_create() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            println("created")
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "created");
+    }
+
+    #[test]
+    fn test_kv_set_get() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "name", "Alice")
+            let val = kv_get(store, "name")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "Alice");
+    }
+
+    #[test]
+    fn test_kv_set_get_missing() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let val = kv_get(store, "missing")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "None");
+    }
+
+    #[test]
+    fn test_kv_del() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "key", "value")
+            let store = kv_del(store, "key")
+            let val = kv_get(store, "key")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "None");
+    }
+
+    #[test]
+    fn test_kv_keys() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "a", 1)
+            let store = kv_set(store, "b", 2)
+            let keys = kv_keys(store)
+            println(len(keys))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+    }
+
+    #[test]
+    fn test_kv_values() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "a", 10)
+            let store = kv_set(store, "b", 20)
+            let values = kv_values(store)
+            println(len(values))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+    }
+
+    #[test]
+    fn test_kv_len() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "x", 1)
+            let store = kv_set(store, "y", 2)
+            let store = kv_set(store, "z", 3)
+            println(kv_len(store))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+    }
+
+    #[test]
+    fn test_kv_has() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "key", "value")
+            let has = kv_has(store, "key")
+            let has_not = kv_has(store, "missing")
+            println(has)
+            println(has_not)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+
+    #[test]
+    fn test_kv_clear() {
+        let (result, output) = run_vryn(r#"
+            let store = kv_new()
+            let store = kv_set(store, "a", 1)
+            let store = kv_clear(store)
+            println(kv_len(store))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "0");
+    }
+
+    #[test]
+    fn test_serialize_int() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize(42)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "i:42");
+    }
+
+    #[test]
+    fn test_serialize_string() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize("hello")
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "s:hello");
+    }
+
+    #[test]
+    fn test_serialize_bool() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize(true)
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "b:true");
+    }
+
+    #[test]
+    fn test_serialize_array() {
+        let (result, output) = run_vryn(r#"
+            let s = serialize([1, 2, 3])
+            println(s)
+        "#);
+        assert!(result.is_ok());
+        assert!(output[0].contains("a:"));
+    }
+
+    #[test]
+    fn test_deserialize_int() {
+        let (result, output) = run_vryn(r#"
+            let val = deserialize("i:42")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+    }
+
+    #[test]
+    fn test_deserialize_string() {
+        let (result, output) = run_vryn(r#"
+            let val = deserialize("s:hello")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+    }
+
+    #[test]
+    fn test_deserialize_bool() {
+        let (result, output) = run_vryn(r#"
+            let val = deserialize("b:true")
+            println(val)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+    }
+
+    #[test]
+    fn test_serialize_deserialize_roundtrip() {
+        let (result, output) = run_vryn(r#"
+            let original = "test_value"
+            let s = serialize(original)
+            let deserialized = deserialize(s)
+            println(deserialized)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "test_value");
+    }
+
+
+
+
     // ============ PHASE 35: AI/ML & Scientific Computing Tests ============
 
     #[test]
@@ -7266,706 +7152,4 @@ mod tests {
         assert!(result.is_ok());
         assert!(output[0].contains("0.6") && output[0].contains("0.8"));
     }
-
-    // ===== Phase 31: Database & Data Tests =====
-
-    #[test]
-    fn test_csv_parse() {
-        let (result, output) = run_vryn(r#"
-            var data = csv_parse("a,b,c\n1,2,3")
-            println(len(data))
-            println(len(data[0]))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "2");
-        assert_eq!(output[1], "3");
-    }
-
-    #[test]
-    fn test_csv_stringify() {
-        let (result, output) = run_vryn(r#"
-            let data = [["a", "b"], ["1", "2"]]
-            let s = csv_stringify(data)
-            println(s)
-        "#);
-        assert!(result.is_ok());
-        assert!(output[0].contains("a,b"));
-    }
-
-    #[test]
-    fn test_kv_new_and_set_get() {
-        let (result, output) = run_vryn(r#"
-            var store = kv_new()
-            store = kv_set(store, "name", "vryn")
-            let val = kv_get(store, "name")
-            println(val)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "vryn");
-    }
-
-    #[test]
-    fn test_kv_has_and_len() {
-        let (result, output) = run_vryn(r#"
-            var store = kv_new()
-            store = kv_set(store, "a", 1)
-            store = kv_set(store, "b", 2)
-            println(kv_has(store, "a"))
-            println(kv_has(store, "c"))
-            println(kv_len(store))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "true");
-        assert_eq!(output[1], "false");
-        assert_eq!(output[2], "2");
-    }
-
-    #[test]
-    fn test_kv_del_and_keys() {
-        let (result, output) = run_vryn(r#"
-            var store = kv_new()
-            store = kv_set(store, "x", 10)
-            store = kv_set(store, "y", 20)
-            store = kv_del(store, "x")
-            println(kv_len(store))
-            let keys = kv_keys(store)
-            println(keys)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "1");
-    }
-
-    #[test]
-    fn test_kv_clear() {
-        let (result, output) = run_vryn(r#"
-            var store = kv_new()
-            store = kv_set(store, "a", 1)
-            store = kv_set(store, "b", 2)
-            store = kv_clear(store)
-            println(kv_len(store))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "0");
-    }
-
-    #[test]
-    fn test_serialize_deserialize_int() {
-        let (result, output) = run_vryn(r#"
-            let s = serialize(42)
-            println(s)
-            let v = deserialize(s)
-            println(v)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "i:42");
-        assert_eq!(output[1], "42");
-    }
-
-    #[test]
-    fn test_serialize_deserialize_str() {
-        let (result, output) = run_vryn(r#"
-            let s = serialize("hello")
-            println(s)
-            let v = deserialize(s)
-            println(v)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "s:hello");
-        assert_eq!(output[1], "hello");
-    }
-
-    #[test]
-    fn test_serialize_bool() {
-        let (result, output) = run_vryn(r#"
-            let s = serialize(true)
-            println(s)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "b:true");
-    }
-
-    // ===== Phase 33: Cross-Compilation & Platform Tests =====
-
-    #[test]
-    fn test_platform_os() {
-        let (result, output) = run_vryn(r#"
-            let os = platform_os()
-            println(type_of(os))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "str");
-    }
-
-    #[test]
-    fn test_platform_arch() {
-        let (result, output) = run_vryn(r#"
-            let arch = platform_arch()
-            println(type_of(arch))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "str");
-    }
-
-    #[test]
-    fn test_platform_endian() {
-        let (result, output) = run_vryn(r#"
-            let e = platform_endian()
-            println(e)
-        "#);
-        assert!(result.is_ok());
-        assert!(output[0] == "little" || output[0] == "big");
-    }
-
-    #[test]
-    fn test_platform_pointer_size() {
-        let (result, output) = run_vryn(r#"
-            let ps = platform_pointer_size()
-            println(ps)
-        "#);
-        assert!(result.is_ok());
-        let size: i64 = output[0].parse().unwrap();
-        assert!(size == 4 || size == 8);
-    }
-
-    #[test]
-    fn test_sizeof_types() {
-        let (result, output) = run_vryn(r#"
-            println(sizeof("int"))
-            println(sizeof("float"))
-            println(sizeof("bool"))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "8");
-        assert_eq!(output[1], "8");
-        assert_eq!(output[2], "1");
-    }
-
-    #[test]
-    fn test_bitwise_and() {
-        let (result, output) = run_vryn(r#"
-            println(bitwise_and(12, 10))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "8");
-    }
-
-    #[test]
-    fn test_bitwise_or() {
-        let (result, output) = run_vryn(r#"
-            println(bitwise_or(12, 10))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "14");
-    }
-
-    #[test]
-    fn test_bitwise_xor() {
-        let (result, output) = run_vryn(r#"
-            println(bitwise_xor(12, 10))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "6");
-    }
-
-    #[test]
-    fn test_bitwise_shl_shr() {
-        let (result, output) = run_vryn(r#"
-            println(bitwise_shl(1, 4))
-            println(bitwise_shr(16, 2))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "16");
-        assert_eq!(output[1], "4");
-    }
-
-    #[test]
-    fn test_to_hex_from_hex() {
-        let (result, output) = run_vryn(r#"
-            let h = to_hex(255)
-            println(h)
-            let n = from_hex("ff")
-            println(n)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "ff");
-        assert_eq!(output[1], "255");
-    }
-
-    #[test]
-    fn test_to_binary_from_binary() {
-        let (result, output) = run_vryn(r#"
-            let b = to_binary(10)
-            println(b)
-            let n = from_binary("1010")
-            println(n)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "1010");
-        assert_eq!(output[1], "10");
-    }
-
-    #[test]
-    fn test_to_octal() {
-        let (result, output) = run_vryn(r#"
-            println(to_octal(8))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "10");
-    }
-
-    #[test]
-    fn test_byte_array() {
-        let (result, output) = run_vryn(r#"
-            let arr = byte_array(4)
-            println(len(arr))
-            println(arr[0])
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "4");
-        assert_eq!(output[1], "0");
-    }
-
-    #[test]
-    fn test_bytes_to_str() {
-        let (result, output) = run_vryn(r#"
-            let arr = [72, 105]
-            let s = bytes_to_str(arr)
-            println(s)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "Hi");
-    }
-
-
-    #[test]
-    fn test_fmt_basic() {
-        let (result, output) = run_vryn(r#"
-            let name = "Alice"
-            let age = 30
-            let msg = fmt("Hello {}, you are {} years old", name, age)
-            println(msg)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "Hello Alice, you are 30 years old");
-    }
-
-    #[test]
-    fn test_str_format() {
-        let (result, output) = run_vryn(r#"
-            let result = str_format("Value: {} and {}", 42, 3.14)
-            println(result)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "Value: 42 and 3.14");
-    }
-
-    #[test]
-    fn test_str_count() {
-        let (result, output) = run_vryn(r#"
-            let count = str_count("banana", "na")
-            println(count)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "2");
-    }
-
-    #[test]
-    fn test_str_is_empty() {
-        let (result, output) = run_vryn(r#"
-            println(str_is_empty(""))
-            println(str_is_empty("hello"))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "true");
-        assert_eq!(output[1], "false");
-    }
-
-    #[test]
-    fn test_str_is_numeric() {
-        let (result, output) = run_vryn(r#"
-            println(str_is_numeric("123"))
-            println(str_is_numeric("12.34"))
-            println(str_is_numeric("-42"))
-            println(str_is_numeric("hello"))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "true");
-        assert_eq!(output[1], "true");
-        assert_eq!(output[2], "true");
-        assert_eq!(output[3], "false");
-    }
-
-    #[test]
-    fn test_str_lines() {
-        let (result, output) = run_vryn(r#"
-            let text = "line1
-line2
-line3"
-            let lines = str_lines(text)
-            println(len(lines))
-            println(lines[0])
-            println(lines[1])
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "3");
-        assert_eq!(output[1], "line1");
-        assert_eq!(output[2], "line2");
-    }
-
-    #[test]
-    fn test_arr_enumerate() {
-        let (result, output) = run_vryn(r#"
-            let arr = ["a", "b", "c"]
-            let enum_arr = arr_enumerate(arr)
-            println(enum_arr[0])
-            println(enum_arr[1])
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[0, a]");
-        assert_eq!(output[1], "[1, b]");
-    }
-
-    #[test]
-    fn test_arr_unique() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 2, 3, 3, 3]
-            let unique = arr_unique(arr)
-            println(len(unique))
-            println(unique)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "3");
-        assert_eq!(output[1], "[1, 2, 3]");
-    }
-
-    #[test]
-    fn test_arr_flatten() {
-        let (result, output) = run_vryn(r#"
-            let nested = [[1, 2], [3, 4], [5]]
-            let flat = arr_flatten(nested)
-            println(flat)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[1, 2, 3, 4, 5]");
-    }
-
-    #[test]
-    fn test_arr_sum() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 3, 4, 5]
-            let sum = arr_sum(arr)
-            println(sum)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "15");
-    }
-
-    #[test]
-    fn test_arr_min() {
-        let (result, output) = run_vryn(r#"
-            let arr = [3, 1, 4, 1, 5, 9]
-            let min = arr_min(arr)
-            println(min)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "1");
-    }
-
-    #[test]
-    fn test_arr_max() {
-        let (result, output) = run_vryn(r#"
-            let arr = [3, 1, 4, 1, 5, 9]
-            let max = arr_max(arr)
-            println(max)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "9");
-    }
-
-    #[test]
-    fn test_arr_join() {
-        let (result, output) = run_vryn(r#"
-            let arr = ["hello", "world", "test"]
-            let joined = arr_join(arr, "-")
-            println(joined)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "hello-world-test");
-    }
-
-    #[test]
-    fn test_arr_chunk() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 3, 4, 5, 6, 7]
-            let chunks = arr_chunk(arr, 3)
-            println(len(chunks))
-            println(chunks[0])
-            println(chunks[1])
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "3");
-        assert_eq!(output[1], "[1, 2, 3]");
-        assert_eq!(output[2], "[4, 5, 6]");
-    }
-
-    #[test]
-    fn test_arr_take() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 3, 4, 5]
-            let taken = arr_take(arr, 3)
-            println(taken)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[1, 2, 3]");
-    }
-
-    #[test]
-    fn test_arr_skip() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 3, 4, 5]
-            let skipped = arr_skip(arr, 2)
-            println(skipped)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[3, 4, 5]");
-    }
-
-    #[test]
-    fn test_to_int() {
-        let (result, output) = run_vryn(r#"
-            println(to_int("42"))
-            println(to_int(3.14))
-            println(to_int(true))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "42");
-        assert_eq!(output[1], "3");
-        assert_eq!(output[2], "1");
-    }
-
-    #[test]
-    fn test_to_float() {
-        let (result, output) = run_vryn(r#"
-            println(to_float(42))
-            println(to_float("3.14"))
-            println(to_float(true))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "42");
-        assert_eq!(output[1], "3.14");
-        assert_eq!(output[2], "1");
-    }
-
-    #[test]
-    fn test_to_bool() {
-        let (result, output) = run_vryn(r#"
-            println(to_bool(1))
-            println(to_bool(0))
-            println(to_bool("hello"))
-            println(to_bool("false"))
-            println(to_bool([1, 2, 3]))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "true");
-        assert_eq!(output[1], "false");
-        assert_eq!(output[2], "true");
-        assert_eq!(output[3], "false");
-        assert_eq!(output[4], "true");
-    }
-
-    #[test]
-    fn test_chr() {
-        let (result, output) = run_vryn(r#"
-            println(chr(65))
-            println(chr(72))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "A");
-        assert_eq!(output[1], "H");
-    }
-
-    #[test]
-    fn test_ord() {
-        let (result, output) = run_vryn(r#"
-            println(ord("A"))
-            println(ord("Hello"))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "65");
-        assert_eq!(output[1], "72");
-    }
-
-    #[test]
-    fn test_range_arr() {
-        let (result, output) = run_vryn(r#"
-            let arr = range_arr(0, 5)
-            println(arr)
-            let arr2 = range_arr(5, 0)
-            println(arr2)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[0, 1, 2, 3, 4]");
-        assert_eq!(output[1], "[5, 4, 3, 2, 1]");
-    }
-
-    #[test]
-    fn test_repeat() {
-        let (result, output) = run_vryn(r#"
-            let repeated = repeat(42, 3)
-            println(repeated)
-            let repeated2 = repeat("x", 4)
-            println(repeated2)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[42, 42, 42]");
-        assert_eq!(output[1], "[x, x, x, x]");
-    }
-
-    #[test]
-    fn test_zip() {
-        let (result, output) = run_vryn(r#"
-            let a = [1, 2, 3]
-            let b = ["a", "b", "c"]
-            let zipped = zip(a, b)
-            println(zipped)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[[1, a], [2, b], [3, c]]");
-    }
-
-    #[test]
-    fn test_typeof_detailed() {
-        let (result, output) = run_vryn(r#"
-            println(typeof_detailed(42))
-            println(typeof_detailed([1, 2, 3]))
-            println(typeof_detailed(["a", "b"]))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "int");
-        assert_eq!(output[1], "array<int>");
-        assert_eq!(output[2], "array<string>");
-    }
-
-    #[test]
-    fn test_type_checking_predicates() {
-        let (result, output) = run_vryn(r#"
-            println(is_int(42))
-            println(is_int(3.14))
-            println(is_float(3.14))
-            println(is_str("hello"))
-            println(is_bool(true))
-            println(is_array([1, 2, 3]))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "true");
-        assert_eq!(output[1], "false");
-        assert_eq!(output[2], "true");
-        assert_eq!(output[3], "true");
-        assert_eq!(output[4], "true");
-        assert_eq!(output[5], "true");
-    }
-
-    #[test]
-    fn test_clamp() {
-        let (result, output) = run_vryn(r#"
-            println(clamp(5, 0, 10))
-            println(clamp(-5, 0, 10))
-            println(clamp(15, 0, 10))
-            println(clamp(5.5, 0.0, 10.0))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "5");
-        assert_eq!(output[1], "0");
-        assert_eq!(output[2], "10");
-        assert!(output[3].contains("5.5") || output[3].starts_with("5"));
-    }
-
-    #[test]
-    fn test_lerp() {
-        let (result, output) = run_vryn(r#"
-            println(lerp(0, 10, 0.5))
-            println(lerp(0, 100, 0.25))
-        "#);
-        assert!(result.is_ok());
-        assert!(output[0].contains("5"));
-        assert!(output[1].contains("25"));
-    }
-
-    #[test]
-    fn test_str_capitalize() {
-        let (result, output) = run_vryn(r#"
-            println(str_capitalize("hello"))
-            println(str_capitalize("WORLD"))
-            println(str_capitalize(""))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "Hello");
-        assert_eq!(output[1], "WORLD");
-        assert_eq!(output[2], "");
-    }
-
-    #[test]
-    fn test_str_title() {
-        let (result, output) = run_vryn(r#"
-            println(str_title("hello world"))
-            println(str_title("foo bar baz"))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "Hello World");
-        assert_eq!(output[1], "Foo Bar Baz");
-    }
-
-    #[test]
-    fn test_arr_first_and_last() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 3, 4, 5]
-            println(arr_first(arr))
-            println(arr_last(arr))
-            println(arr_first([]))
-            println(arr_last([]))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "1");
-        assert_eq!(output[1], "5");
-        assert_eq!(output[2], "None");
-        assert_eq!(output[3], "None");
-    }
-
-    #[test]
-    fn test_arr_compact() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 3]
-            let compacted = arr_compact(arr)
-            println(compacted)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "[1, 2, 3]");
-    }
-
-    #[test]
-    fn test_arr_count() {
-        let (result, output) = run_vryn(r#"
-            let arr = [1, 2, 2, 3, 2, 4]
-            println(arr_count(arr, 2))
-            println(arr_count(arr, 5))
-            println(arr_count(arr, 1))
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "3");
-        assert_eq!(output[1], "0");
-        assert_eq!(output[2], "1");
-    }
-
-    #[test]
-    fn test_time_ms() {
-        let (result, output) = run_vryn(r#"
-            let t = time_ms()
-            println(t > 0)
-        "#);
-        assert!(result.is_ok());
-        assert_eq!(output[0], "true");
-    }
-
-
-
 }

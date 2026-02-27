@@ -8,6 +8,7 @@ use std::collections::HashSet;
 
 /// Diagnostic severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum DiagnosticSeverity {
     Error,
     Warning,
@@ -42,10 +43,12 @@ impl Diagnostic {
         Self::new(message, line, column, DiagnosticSeverity::Error)
     }
 
+    #[allow(dead_code)]
     pub fn warning(message: String, line: usize, column: usize) -> Self {
         Self::new(message, line, column, DiagnosticSeverity::Warning)
     }
 
+    #[allow(dead_code)]
     pub fn info(message: String, line: usize, column: usize) -> Self {
         Self::new(message, line, column, DiagnosticSeverity::Info)
     }
@@ -87,6 +90,7 @@ pub struct Symbol {
     pub name: String,
     pub kind: SymbolKind,
     pub line: usize,
+    #[allow(dead_code)]
     pub column: usize,
     pub type_info: Option<String>, // e.g., "i64", "String", etc.
 }
@@ -325,6 +329,7 @@ impl VrynAnalyzer {
     }
 
     /// Get completion suggestions
+    #[allow(dead_code)]
     pub fn get_completions(source: &str, _line: usize) -> Vec<String> {
         let mut completions = HashSet::new();
 
@@ -361,6 +366,7 @@ impl VrynAnalyzer {
     }
 
     /// Find the definition of a symbol
+    #[allow(dead_code)]
     pub fn find_definition(source: &str, name: &str) -> Option<Symbol> {
         match Self::parse(source) {
             Ok(program) => {
@@ -372,6 +378,7 @@ impl VrynAnalyzer {
     }
 
     /// Get hover information for a symbol
+    #[allow(dead_code)]
     pub fn get_hover(source: &str, name: &str) -> Option<String> {
         match Self::parse(source) {
             Ok(program) => {

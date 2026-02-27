@@ -9,6 +9,7 @@ pub struct CCodeGen {
     indent_level: usize,
     output: String,
     header_includes: HashSet<String>,
+    #[allow(dead_code)]
     defined_functions: HashSet<String>,
     variable_types: HashMap<String, String>,
     in_loop: bool,
