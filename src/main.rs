@@ -3,6 +3,8 @@ mod parser;
 mod codegen;
 mod typechecker;
 mod formatter;
+mod package;
+mod ccodegen;
 
 use std::env;
 use std::fs;
@@ -81,6 +83,14 @@ fn main() {
             }
             format_file(&args[2]);
         }
+        "compile" => {
+            if args.len() < 3 {
+                eprintln!("[31merror:[0m No file specified");
+                eprintln!("Usage: vryn compile <file.vn>");
+                std::process::exit(1);
+            }
+            compile_file(&args[2]);
+        }
         other => {
             if other.ends_with(".vn") {
                 run_file(other);
@@ -103,6 +113,7 @@ fn print_usage() {
 
   COMMANDS:
     run <file.vn>     Compile and run a Vryn program
+    compile <file.vn> Transpile Vryn to C code
     new <name>        Create a new Vryn project
     init              Initialize a Vryn project in current directory
     test [file.vn]    Run test functions (test_*)
@@ -525,3 +536,63 @@ fn test_file(path: Option<&str>) {
     }
 }
 
+
+fn compile_file(filepath: &str) {
+    let content = match fs::read_to_string(filepath) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("\x1b[31merror:\x1b[0m Could not read file '{}': {}", filepath, e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut lexer = Lexer::new(&content);
+    let tokens = match lexer.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("\x1b[31merror[Lexer]:\x1b[0m {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut parser = Parser::new(tokens);
+    let program = match parser.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("\x1b[31merror[Parser]:\x1b[0m {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Generate C code
+    let mut codegen = ccodegen::CCodeGen::new();
+    let c_code = codegen.generate(&program);
+
+    // Write to .c file
+    let c_filepath = filepath.replace(".vn", ".c");
+    match fs::write(&c_filepath, &c_code) {
+        Ok(_) => {
+            println!("\x1b[32m✓\x1b[0m Generated C code in '{}'", c_filepath);
+        }
+        Err(e) => {
+            eprintln!("\x1b[31merror:\x1b[0m Could not write to file '{}': {}", c_filepath, e);
+            std::process::exit(1);
+        }
+    }
+
+    // Optionally try to compile with gcc if available
+    let status = std::process::Command::new("gcc")
+        .arg(&c_filepath)
+        .arg("-o")
+        .arg(filepath.replace(".vn", ""))
+        .status();
+
+    match status {
+        Ok(status) if status.success() => {
+            println!("\x1b[32m✓\x1b[0m Compiled with gcc");
+        }
+        _ => {
+            eprintln!("\x1b[33mwarning:\x1b[0m Could not compile with gcc (is it installed?)");
+        }
+    }
+}
