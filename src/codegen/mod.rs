@@ -2443,4 +2443,408 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(output[0], "matched");
     }
+
+    // Additional String function tests
+    #[test]
+    fn test_str_len_builtin() {
+        let (result, output) = run_vryn(r#"
+            println(str_len("hello"))
+            println(str_len(""))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "0");
+    }
+
+    #[test]
+    fn test_str_contains_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(str_contains(s, "world"))
+            println(str_contains(s, "xyz"))
+            println(str_contains(s, ""))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+        assert_eq!(output[2], "true");
+    }
+
+    #[test]
+    fn test_str_starts_ends_with() {
+        let (result, output) = run_vryn(r#"
+            let s = "hello world"
+            println(str_starts_with(s, "hello"))
+            println(str_starts_with(s, "world"))
+            println(str_ends_with(s, "world"))
+            println(str_ends_with(s, "hello"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+        assert_eq!(output[2], "true");
+        assert_eq!(output[3], "false");
+    }
+
+    #[test]
+    fn test_str_split_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let s = "a,b,c,d"
+            let parts = str_split(s, ",")
+            println(len(parts))
+            println(parts[0])
+            println(parts[3])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "4");
+        assert_eq!(output[1], "a");
+        assert_eq!(output[2], "d");
+    }
+
+    #[test]
+    fn test_str_trim_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(str_trim("  hello  "))
+            println(str_trim("no_trim"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello");
+        assert_eq!(output[1], "no_trim");
+    }
+
+    #[test]
+    fn test_str_upper_lower() {
+        let (result, output) = run_vryn(r#"
+            let s = "HeLLo WoRLD"
+            println(str_upper(s))
+            println(str_lower(s))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "HELLO WORLD");
+        assert_eq!(output[1], "hello world");
+    }
+
+    #[test]
+    fn test_str_replace_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let s = "aaa"
+            let replaced = str_replace(s, "a", "b")
+            println(replaced)
+            let s2 = "hello world"
+            let replaced2 = str_replace(s2, "world", "vryn")
+            println(replaced2)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "bbb");
+        assert_eq!(output[1], "hello vryn");
+    }
+
+    #[test]
+    fn test_str_chars_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let s = "xyz"
+            let chars = str_chars(s)
+            println(len(chars))
+            println(chars[1])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "y");
+    }
+
+    #[test]
+    fn test_str_join_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let arr = ["x", "y", "z"]
+            println(str_join(arr, ""))
+            println(str_join(arr, " | "))
+            let nums = [1, 2, 3]
+            println(str_join(nums, ","))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "xyz");
+        assert_eq!(output[1], "x | y | z");
+        assert_eq!(output[2], "1,2,3");
+    }
+
+    #[test]
+    fn test_substr_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let s = "abcdefgh"
+            println(substr(s, 0, 3))
+            println(substr(s, 2, 3))
+            println(substr(s, 7, 1))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "abc");
+        assert_eq!(output[1], "cde");
+        assert_eq!(output[2], "h");
+    }
+
+    // Additional Array function tests
+    #[test]
+    fn test_pop_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let arr = ["a", "b", "c"]
+            let popped = pop(arr)
+            println(popped)
+            let arr2 = []
+            let popped2 = pop(arr2)
+            println(popped2)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "c");
+        assert_eq!(output[1], "None");
+    }
+
+    #[test]
+    fn test_arr_reverse_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let arr = ["a", "b", "c", "d"]
+            let reversed = arr_reverse(arr)
+            println(reversed[0])
+            println(reversed[3])
+            println(len(reversed))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "d");
+        assert_eq!(output[1], "a");
+        assert_eq!(output[2], "4");
+    }
+
+    #[test]
+    fn test_arr_contains_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let arr = [1, 2, 3, 4, 5]
+            println(arr_contains(arr, 3))
+            println(arr_contains(arr, 10))
+            let strs = ["hello", "world"]
+            println(arr_contains(strs, "hello"))
+            println(arr_contains(strs, "xyz"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+        assert_eq!(output[2], "true");
+        assert_eq!(output[3], "false");
+    }
+
+    #[test]
+    fn test_arr_slice_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let arr = [10, 20, 30, 40, 50]
+            let slice1 = arr_slice(arr, 0, 3)
+            println(len(slice1))
+            println(slice1[0])
+            println(slice1[2])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "10");
+        assert_eq!(output[2], "30");
+    }
+
+    #[test]
+    fn test_arr_sort_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            let arr = [5, 2, 8, 1, 9]
+            let sorted = arr_sort(arr)
+            println(sorted[0])
+            println(sorted[2])
+            println(sorted[4])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "1");
+        assert_eq!(output[1], "5");
+        assert_eq!(output[2], "9");
+    }
+
+    // Additional Math function tests
+    #[test]
+    fn test_abs_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(abs(-42))
+            println(abs(42))
+            println(abs(0))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+        assert_eq!(output[1], "42");
+        assert_eq!(output[2], "0");
+    }
+
+    #[test]
+    fn test_min_max_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(min(10, 5))
+            println(max(10, 5))
+            println(min(-3, -7))
+            println(max(-3, -7))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "10");
+        assert_eq!(output[2], "-7");
+        assert_eq!(output[3], "-3");
+    }
+
+    #[test]
+    fn test_floor_ceil_round_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(floor(5.9))
+            println(ceil(5.1))
+            println(round(5.4))
+            println(round(5.5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "6");
+        assert_eq!(output[2], "5");
+        assert_eq!(output[3], "6");
+    }
+
+    #[test]
+    fn test_sqrt_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(sqrt(16.0))
+            println(sqrt(100.0))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "4");
+        assert_eq!(output[1], "10");
+    }
+
+    #[test]
+    fn test_pow_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(pow(2, 5))
+            println(pow(10, 2))
+            println(pow(3, 3))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "32");
+        assert_eq!(output[1], "100");
+        assert_eq!(output[2], "27");
+    }
+
+    #[test]
+    fn test_int_conversion_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(int(5.9))
+            println(int("123"))
+            println(int(true))
+            println(int(false))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+        assert_eq!(output[1], "123");
+        assert_eq!(output[2], "1");
+        assert_eq!(output[3], "0");
+    }
+
+    #[test]
+    fn test_float_conversion_comprehensive() {
+        let (result, output) = run_vryn(r#"
+            println(float(5))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "5");
+    }
+
+    // I/O function tests
+    #[test]
+    fn test_file_exists() {
+        let (result, output) = run_vryn(r#"
+            println(file_exists("/etc/passwd"))
+            println(file_exists("/tmp/nonexistent_vryn_test_file_xyz_9999"))
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "true");
+        assert_eq!(output[1], "false");
+    }
+
+    #[test]
+    fn test_write_and_read_file() {
+        let (result, output) = run_vryn(r#"
+            let path = "/tmp/vryn_test_file.txt"
+            write_file(path, "hello vryn")
+            let content = read_file(path)
+            println(content)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "hello vryn");
+        let _ = std::fs::remove_file("/tmp/vryn_test_file.txt");
+    }
+
+    #[test]
+    fn test_write_read_multiple_lines() {
+        let (result, output) = run_vryn(r#"
+            let path = "/tmp/vryn_multiline_test.txt"
+            write_file(path, "line1\nline2\nline3")
+            let content = read_file(path)
+            println(content)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "line1\nline2\nline3");
+        let _ = std::fs::remove_file("/tmp/vryn_multiline_test.txt");
+    }
+
+    #[test]
+    fn test_write_file_overwrites() {
+        let (result, output) = run_vryn(r#"
+            let path = "/tmp/vryn_overwrite_test.txt"
+            write_file(path, "first")
+            write_file(path, "second")
+            let content = read_file(path)
+            println(content)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "second");
+        let _ = std::fs::remove_file("/tmp/vryn_overwrite_test.txt");
+    }
+
+    #[test]
+    fn test_complex_string_operations() {
+        let (result, output) = run_vryn(r#"
+            let text = "  Hello, Vryn! "
+            let trimmed = str_trim(text)
+            let lowered = str_lower(trimmed)
+            let parts = str_split(lowered, ",")
+            println(len(parts))
+            println(parts[0])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "2");
+        assert_eq!(output[1], "hello");
+    }
+
+    #[test]
+    fn test_array_operations_chain() {
+        let (result, output) = run_vryn(r#"
+            let arr = [5, 2, 8, 1, 9, 3]
+            let sorted = arr_sort(arr)
+            let sliced = arr_slice(sorted, 1, 4)
+            println(len(sliced))
+            println(sliced[0])
+            println(sliced[2])
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "3");
+        assert_eq!(output[1], "2");
+        assert_eq!(output[2], "5");
+    }
+
+    #[test]
+    fn test_math_operations_chain() {
+        let (result, output) = run_vryn(r#"
+            let x = -42
+            let y = abs(x)
+            let z = pow(y, 2)
+            println(y)
+            println(z)
+        "#);
+        assert!(result.is_ok());
+        assert_eq!(output[0], "42");
+        assert_eq!(output[1], "1764");
+    }
 }
